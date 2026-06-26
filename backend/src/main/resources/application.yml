@@ -1,0 +1,67 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tonepilot-backend
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 60MB
+  datasource:
+    url: ${TONEPILOT_DB_URL:jdbc:h2:file:./data/tonepilot;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE}
+    username: ${TONEPILOT_DB_USERNAME:sa}
+    password: ${TONEPILOT_DB_PASSWORD:}
+    driver-class-name: ${TONEPILOT_DB_DRIVER:org.h2.Driver}
+  sql:
+    init:
+      mode: ${TONEPILOT_SQL_INIT_MODE:always}
+      encoding: UTF-8
+  h2:
+    console:
+      enabled: ${TONEPILOT_H2_CONSOLE_ENABLED:true}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+
+tonepilot:
+  persistence:
+    enabled: ${TONEPILOT_PERSISTENCE_ENABLED:true}
+  security:
+    api-key-enabled: ${TONEPILOT_API_KEY_ENABLED:false}
+    api-key: ${TONEPILOT_API_KEY:}
+  rate-limit:
+    enabled: ${TONEPILOT_RATE_LIMIT_ENABLED:true}
+    requests-per-minute: ${TONEPILOT_RATE_LIMIT_RPM:120}
+  workflow:
+    redis-enabled: ${TONEPILOT_WORKFLOW_REDIS_ENABLED:true}
+    redis-key-prefix: ${TONEPILOT_WORKFLOW_REDIS_KEY_PREFIX:tonepilot:workflow:}
+    ttl: ${TONEPILOT_WORKFLOW_TTL:24h}
+  storage:
+    type: ${TONEPILOT_STORAGE_TYPE:local}
+    root: ./storage
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:tonepilot}
+      secret-key: ${MINIO_SECRET_KEY:tonepilot123}
+      bucket: ${MINIO_BUCKET:tonepilot}
+  rag:
+    default-top-k: 5
+  ai:
+    provider: ${TONEPILOT_AI_PROVIDER:rule}
+    fallback-enabled: ${TONEPILOT_AI_FALLBACK_ENABLED:true}
+    temperature: ${TONEPILOT_AI_TEMPERATURE:0.2}
+    response-format-enabled: ${TONEPILOT_AI_RESPONSE_FORMAT_ENABLED:false}
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:}
+      chat-model: ${OPENAI_CHAT_MODEL:}
+      vision-model: ${OPENAI_VISION_MODEL:${OPENAI_CHAT_MODEL:}}
+    qwen2:
+      base-url: ${QWEN2_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${DASHSCOPE_API_KEY:}
+      chat-model: ${QWEN2_CHAT_MODEL:}
+      vision-model: ${QWEN2_VISION_MODEL:${QWEN2_CHAT_MODEL:}}
