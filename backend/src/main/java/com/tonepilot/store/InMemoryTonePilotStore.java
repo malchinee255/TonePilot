@@ -17,7 +17,6 @@ public class InMemoryTonePilotStore {
     public final AtomicLong analysisIds = new AtomicLong(1);
     public final AtomicLong knowledgeIds = new AtomicLong(1);
     public final AtomicLong adjustmentIds = new AtomicLong(1);
-    public final AtomicLong xmpExportIds = new AtomicLong(1);
     public final AtomicLong styleIds = new AtomicLong(1);
     public final AtomicLong sampleIds = new AtomicLong(1);
     public final AtomicLong styleKnowledgeIds = new AtomicLong(1);
@@ -26,7 +25,6 @@ public class InMemoryTonePilotStore {
     public final Map<Long, PhotoAnalysis> analyses = new ConcurrentHashMap<>();
     public final Map<Long, ColorKnowledge> knowledge = new ConcurrentHashMap<>();
     public final Map<Long, ColorAdjustment> adjustments = new ConcurrentHashMap<>();
-    public final Map<Long, XmpExport> xmpExports = new ConcurrentHashMap<>();
     public final Map<Long, ColorStyle> styles = new ConcurrentHashMap<>();
     public final Map<Long, StyleSample> samples = new ConcurrentHashMap<>();
     public final Map<Long, StyleKnowledge> styleKnowledge = new ConcurrentHashMap<>();

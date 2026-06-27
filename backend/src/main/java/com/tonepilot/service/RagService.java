@@ -1,12 +1,9 @@
 package com.tonepilot.service;
 
 import com.tonepilot.domain.ColorKnowledge;
-import com.tonepilot.domain.PhotoAnalysis;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.store.InMemoryTonePilotStore;
 import com.tonepilot.web.dto.RagSearchItem;
-import com.tonepilot.web.dto.RagSearchRequest;
-import com.tonepilot.web.dto.RagSearchResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,12 +20,6 @@ public class RagService {
     public RagService(InMemoryTonePilotStore store, @Value("${tonepilot.rag.default-top-k:5}") int defaultTopK) {
         this.store = store;
         this.defaultTopK = defaultTopK;
-    }
-
-    public RagSearchResponse search(RagSearchRequest request) {
-        String query = normalizeQuery(request.query(), request.photoId());
-        int topK = request.topK() == null || request.topK() <= 0 ? defaultTopK : request.topK();
-        return new RagSearchResponse(query, retrieve(query, topK));
     }
 
     public List<RagSearchItem> retrieve(String query, int topK) {
@@ -57,29 +48,6 @@ public class RagService {
                 .sorted(Comparator.comparing(RagSearchItem::score).reversed())
                 .limit(topK)
                 .toList();
-    }
-
-    private String normalizeQuery(String query, Long photoId) {
-        if (query != null && !query.isBlank()) {
-            return query;
-        }
-        if (photoId != null) {
-            return store.latestAnalysisForPhoto(photoId)
-                    .map(this::queryFromAnalysis)
-                    .orElse("");
-        }
-        return "";
-    }
-
-    private String queryFromAnalysis(PhotoAnalysis analysis) {
-        return String.join("，",
-                analysis.scene(),
-                analysis.subject(),
-                String.join("，", analysis.exposureIssues()),
-                String.join("，", analysis.whiteBalanceIssues()),
-                String.join("，", analysis.colorIssues()),
-                String.join("，", analysis.recommendedStyles())
-        );
     }
 
     private double score(String query, String corpus) {

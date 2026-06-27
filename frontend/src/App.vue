@@ -1,26 +1,30 @@
 <template>
-  <div class="app-shell">
+  <div class="admin-shell">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">TP</div>
         <div>
           <h1>TonePilot</h1>
-          <p>Lightroom Agent</p>
+          <p>调色风格管理端</p>
         </div>
       </div>
 
       <el-menu :default-active="activeView" class="nav-menu" @select="activeView = $event">
-        <el-menu-item index="workflow">
-          <el-icon><MagicStick /></el-icon>
-          <span>调色链路</span>
+        <el-menu-item index="styles">
+          <el-icon><Operation /></el-icon>
+          <span>风格库</span>
         </el-menu-item>
         <el-menu-item index="knowledge">
           <el-icon><Collection /></el-icon>
           <span>知识库</span>
         </el-menu-item>
-        <el-menu-item index="admin">
-          <el-icon><Operation /></el-icon>
-          <span>管理端</span>
+        <el-menu-item index="samples">
+          <el-icon><Picture /></el-icon>
+          <span>样片管理</span>
+        </el-menu-item>
+        <el-menu-item index="observability">
+          <el-icon><DataLine /></el-icon>
+          <span>观测评估</span>
         </el-menu-item>
       </el-menu>
     </aside>
@@ -31,207 +35,190 @@
           <h2>{{ pageTitle }}</h2>
           <p>{{ pageSubtitle }}</p>
         </div>
-        <el-tag effect="plain" round>非生成式调色决策</el-tag>
+        <el-tag effect="plain" round>用户端：Lightroom Classic 插件</el-tag>
       </section>
 
-      <section v-if="activeView === 'workflow'" class="grid workflow-grid">
+      <section v-if="activeView === 'styles'" class="grid two">
         <div class="panel">
           <div class="panel-title">
-            <h3>照片</h3>
-            <el-button :icon="Upload" type="primary" @click="uploadPhoto">上传</el-button>
+            <h3>创建风格</h3>
+            <el-button :icon="Plus" type="primary" @click="createStyle">保存</el-button>
           </div>
-          <el-upload
-            drag
-            :auto-upload="false"
-            :limit="1"
-            :on-change="onPhotoChange"
-            :file-list="photoFiles"
-          >
-            <el-icon class="upload-icon"><UploadFilled /></el-icon>
-          </el-upload>
-          <div v-if="photo" class="entity-line">
-            <span>#{{ photo.id }}</span>
-            <strong>{{ photo.fileName }}</strong>
-          </div>
-          <el-form label-position="top" class="compact-form">
-            <el-form-item label="模型供应商">
-              <el-select v-model="modelProvider">
-                <el-option label="本地规则" value="rule" />
-                <el-option label="OpenAI" value="openai" />
-                <el-option label="阿里 Qwen2" value="qwen2" />
-              </el-select>
+          <el-form label-position="top">
+            <el-form-item label="风格名称">
+              <el-input v-model="styleForm.styleName" placeholder="例如：夜景电影感" />
+            </el-form-item>
+            <el-form-item label="风格编码">
+              <el-input v-model="styleForm.styleCode" placeholder="例如：night_cinematic" />
+            </el-form-item>
+            <el-form-item label="描述">
+              <el-input v-model="styleForm.description" type="textarea" :rows="4" />
+            </el-form-item>
+            <el-form-item label="适用场景">
+              <el-input v-model="styleForm.suitableScenes" placeholder="用逗号分隔" />
+            </el-form-item>
+            <el-form-item label="避免场景">
+              <el-input v-model="styleForm.avoidScenes" placeholder="用逗号分隔" />
             </el-form-item>
           </el-form>
-          <div class="button-row">
-            <el-button :icon="View" @click="analyzePhoto" :disabled="!photo">分析</el-button>
-            <el-input v-model="targetStyle" placeholder="目标风格" />
-            <el-button :icon="MagicStick" type="success" @click="generateAdjustment" :disabled="!photo">生成参数</el-button>
-          </div>
-          <div class="button-row">
-            <el-button :icon="CircleCheck" @click="evaluateAdjustment" :disabled="!adjustment?.id">评测</el-button>
-            <el-input v-model="presetName" placeholder="XMP 名称" />
-            <el-button :icon="Download" @click="exportXmp" :disabled="!adjustment?.id">导出 XMP</el-button>
-          </div>
-          <div class="button-row single-action">
-            <el-button :icon="MagicStick" @click="startTuningSession()" :disabled="!photo">开启微调会话</el-button>
-            <el-tag v-if="tuningSession" type="success" effect="plain">会话 #{{ shortId(tuningSession.id) }}</el-tag>
-          </div>
-          <el-alert
-            v-if="lightroomStatus"
-            class="connector-alert"
-            :title="lightroomStatus.message"
-            :type="lightroomStatus.available ? 'success' : 'info'"
-            show-icon
-            :closable="false"
-          />
         </div>
 
-        <div class="panel preview-panel">
+        <div class="panel">
           <div class="panel-title">
-            <h3>实时对比</h3>
-            <el-tag v-if="tuningSession?.saved" type="success">已保存</el-tag>
+            <h3>风格列表</h3>
+            <el-button :icon="Refresh" @click="loadStyles">刷新</el-button>
           </div>
-          <div v-if="tuningSession?.preview" class="compare-grid">
-            <div class="image-box">
-              <span>原图</span>
-              <img :src="fileUrl(tuningSession.preview.originalUrl)" alt="原图" />
-            </div>
-            <div class="image-box">
-              <span>调色预览</span>
-              <img :src="fileUrl(tuningSession.preview.previewUrl)" alt="调色预览" />
-            </div>
-          </div>
-          <el-empty v-else description="生成参数或开启微调后显示预览" />
-        </div>
-
-        <div class="panel tuning-panel">
-          <div class="panel-title">
-            <h3>多轮微调</h3>
-            <el-button :icon="CircleCheck" type="primary" plain @click="saveTuningResult" :disabled="!tuningSession">保存结果</el-button>
-          </div>
-          <div class="chat-list">
-            <div
-              v-for="(message, index) in tuningSession?.messages || []"
-              :key="index"
-              class="chat-message"
-              :class="message.role"
-            >
-              <span>{{ message.role === 'user' ? '用户' : 'Agent' }}</span>
-              <p>{{ message.content }}</p>
-            </div>
-          </div>
-          <div class="chat-input">
-            <el-input
-              v-model="tuningPrompt"
-              type="textarea"
-              :rows="3"
-              placeholder="例如：再亮一点，肤色更通透，绿色不要那么脏"
-              :disabled="!tuningSession"
-            />
-            <el-button :icon="MagicStick" type="success" @click="sendTuningMessage" :disabled="!tuningSession || !tuningPrompt.trim()">发送微调</el-button>
-          </div>
-          <el-table :data="tuningSession?.latestDeltas || []" height="220" empty-text="暂无参数变化">
-            <el-table-column prop="label" label="参数" min-width="110" />
-            <el-table-column prop="beforeValue" label="原值" width="76" />
-            <el-table-column prop="afterValue" label="新值" width="76" />
-            <el-table-column prop="delta" label="变化" width="76" />
-            <el-table-column prop="reason" label="原因" min-width="180" />
+          <el-table :data="styles" height="560" @row-click="selectStyle">
+            <el-table-column prop="styleName" label="名称" min-width="160" />
+            <el-table-column prop="styleCode" label="编码" min-width="180" />
+            <el-table-column prop="status" label="状态" width="100" />
+            <el-table-column width="76">
+              <template #default="{ row }">
+                <el-button :icon="Delete" circle text @click.stop="deleteStyle(row.id)" />
+              </template>
+            </el-table-column>
           </el-table>
-        </div>
-
-        <div class="panel output-panel">
-          <div class="panel-title">
-            <h3>结果</h3>
-            <el-tag v-if="evaluation" :type="evaluation.passed ? 'success' : 'warning'">{{ evaluation.score }}</el-tag>
-          </div>
-          <el-tabs v-model="resultTab">
-            <el-tab-pane label="分析" name="analysis">
-              <pre>{{ pretty(analysis) }}</pre>
-            </el-tab-pane>
-            <el-tab-pane label="参数" name="adjustment">
-              <pre>{{ pretty(adjustment) }}</pre>
-            </el-tab-pane>
-            <el-tab-pane label="会话" name="session">
-              <pre>{{ pretty(tuningSession) }}</pre>
-            </el-tab-pane>
-            <el-tab-pane label="评测" name="evaluation">
-              <pre>{{ pretty(evaluation) }}</pre>
-            </el-tab-pane>
-            <el-tab-pane label="XMP" name="xmp">
-              <a v-if="xmpExport" :href="xmpExport.xmpUrl" target="_blank">{{ xmpExport.xmpUrl }}</a>
-            </el-tab-pane>
-          </el-tabs>
         </div>
       </section>
 
       <section v-if="activeView === 'knowledge'" class="grid two">
         <div class="panel">
           <div class="panel-title">
-            <h3>新增知识</h3>
+            <h3>新增调色知识</h3>
             <el-button :icon="Plus" type="primary" @click="createKnowledge">保存</el-button>
           </div>
           <el-form label-position="top">
-            <el-form-item label="标题"><el-input v-model="knowledgeForm.title" /></el-form-item>
-            <el-form-item label="场景"><el-input v-model="knowledgeForm.scene" /></el-form-item>
-            <el-form-item label="目标风格"><el-input v-model="knowledgeForm.targetStyle" /></el-form-item>
-            <el-form-item label="问题"><el-input v-model="knowledgeForm.problems" /></el-form-item>
-            <el-form-item label="策略"><el-input v-model="knowledgeForm.strategy" type="textarea" :rows="4" /></el-form-item>
+            <el-form-item label="标题">
+              <el-input v-model="knowledgeForm.title" />
+            </el-form-item>
+            <el-form-item label="场景">
+              <el-input v-model="knowledgeForm.scene" />
+            </el-form-item>
+            <el-form-item label="目标风格">
+              <el-input v-model="knowledgeForm.targetStyle" />
+            </el-form-item>
+            <el-form-item label="常见问题">
+              <el-input v-model="knowledgeForm.problems" placeholder="用逗号或换行分隔" />
+            </el-form-item>
+            <el-form-item label="调色策略">
+              <el-input v-model="knowledgeForm.strategy" type="textarea" :rows="5" />
+            </el-form-item>
           </el-form>
         </div>
+
         <div class="panel">
           <div class="panel-title">
-            <h3>条目</h3>
-            <el-button :icon="Refresh" @click="loadKnowledge">刷新</el-button>
+            <h3>知识审核</h3>
+            <div class="title-actions">
+              <el-select v-model="knowledgeStatus" class="status-select" @change="loadAdminKnowledge">
+                <el-option label="全部" value="" />
+                <el-option label="待审核" value="pending" />
+                <el-option label="已启用" value="approved" />
+                <el-option label="已拒绝" value="rejected" />
+              </el-select>
+              <el-button :icon="Refresh" @click="loadAdminKnowledge">刷新</el-button>
+            </div>
           </div>
-          <el-table :data="knowledgeList" height="520">
+          <el-table :data="adminKnowledge" height="560">
             <el-table-column prop="title" label="标题" min-width="180" />
-            <el-table-column prop="scene" label="场景" width="120" />
-            <el-table-column prop="targetStyle" label="风格" width="140" />
-            <el-table-column width="84">
+            <el-table-column prop="scene" label="场景" width="130" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column width="138">
               <template #default="{ row }">
-                <el-button :icon="Delete" circle text @click="deleteKnowledge(row.id)" />
+                <el-button :icon="CircleCheck" circle text @click="approveKnowledge(row.id)" />
+                <el-button :icon="Close" circle text @click="rejectKnowledge(row.id)" />
+                <el-button :icon="SwitchButton" circle text @click="disableKnowledge(row.id)" />
               </template>
             </el-table-column>
           </el-table>
         </div>
       </section>
 
-      <section v-if="activeView === 'admin'" class="grid two">
+      <section v-if="activeView === 'samples'" class="grid two">
         <div class="panel">
           <div class="panel-title">
-            <h3>风格</h3>
-            <el-button :icon="Plus" type="primary" @click="createStyle">创建</el-button>
+            <h3>上传风格样片</h3>
+            <el-button :icon="Upload" type="primary" @click="uploadSample">上传</el-button>
           </div>
+          <el-alert
+            class="inline-alert"
+            type="info"
+            :closable="false"
+            title="样片只用于管理端沉淀风格知识；用户修图入口在 Lightroom 插件中。"
+          />
           <el-form label-position="top">
-            <el-form-item label="名称"><el-input v-model="styleForm.styleName" /></el-form-item>
-            <el-form-item label="编码"><el-input v-model="styleForm.styleCode" /></el-form-item>
-            <el-form-item label="描述"><el-input v-model="styleForm.description" type="textarea" :rows="4" /></el-form-item>
+            <el-form-item label="所属风格">
+              <el-select v-model="sampleForm.styleId" placeholder="选择风格">
+                <el-option
+                  v-for="style in styles"
+                  :key="style.id"
+                  :label="style.styleName"
+                  :value="style.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="样片说明">
+              <el-input v-model="sampleForm.description" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item label="标签">
+              <el-input v-model="sampleForm.tags" placeholder="夜景, 人像, 霓虹" />
+            </el-form-item>
+            <el-form-item label="成片">
+              <el-upload :auto-upload="false" :limit="1" :on-change="handleSampleFileChange">
+                <el-button :icon="Picture">选择文件</el-button>
+              </el-upload>
+            </el-form-item>
           </el-form>
-          <el-table :data="styles" height="280" @row-click="selectedStyle = $event">
-            <el-table-column prop="styleName" label="名称" />
-            <el-table-column prop="status" label="状态" width="100" />
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <h3>样片列表</h3>
+            <div class="title-actions">
+              <el-button :icon="Refresh" @click="loadSamples">刷新</el-button>
+            </div>
+          </div>
+          <el-table :data="samples" height="560">
+            <el-table-column prop="description" label="说明" min-width="180" />
+            <el-table-column prop="sampleType" label="类型" width="120" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column width="150">
+              <template #default="{ row }">
+                <el-button size="small" @click="analyzeSample(row.id)">分析</el-button>
+                <el-button size="small" @click="generateKnowledge(row.id)">生成知识</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </section>
+
+      <section v-if="activeView === 'observability'" class="grid two">
+        <div class="panel">
+          <div class="panel-title">
+            <h3>LLM 调用</h3>
+            <el-button :icon="Refresh" @click="loadObservability">刷新</el-button>
+          </div>
+          <el-table :data="llmCalls" height="560">
+            <el-table-column prop="provider" label="模型厂商" width="120" />
+            <el-table-column prop="model" label="模型" width="150" />
+            <el-table-column prop="purpose" label="用途" min-width="160" />
+            <el-table-column prop="success" label="成功" width="90" />
           </el-table>
         </div>
 
         <div class="panel">
           <div class="panel-title">
-            <h3>知识审核</h3>
-            <el-button :icon="Refresh" @click="loadAdminKnowledge">刷新</el-button>
+            <h3>审计事件</h3>
+            <el-button :icon="DataAnalysis" @click="runBenchmark">运行评估</el-button>
           </div>
-          <div class="selected-style" v-if="selectedStyle">
-            <span>#{{ selectedStyle.id }}</span>
-            <strong>{{ selectedStyle.styleName }}</strong>
-          </div>
-          <el-table :data="adminKnowledge" height="520">
-            <el-table-column prop="title" label="标题" min-width="180" />
-            <el-table-column prop="status" label="状态" width="110" />
-            <el-table-column width="132">
-              <template #default="{ row }">
-                <el-button :icon="CircleCheck" circle text @click="approveKnowledge(row.id)" />
-                <el-button :icon="Close" circle text @click="rejectKnowledge(row.id)" />
-              </template>
-            </el-table-column>
+          <el-table :data="auditEvents" height="480">
+            <el-table-column prop="eventType" label="事件" width="150" />
+            <el-table-column prop="actor" label="来源" width="130" />
+            <el-table-column prop="summary" label="摘要" min-width="220" />
           </el-table>
+          <div v-if="benchmarkSummary" class="benchmark-box">
+            {{ benchmarkSummary }}
+          </div>
         </div>
       </section>
     </main>
@@ -239,160 +226,108 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, type UploadFile } from 'element-plus'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import {
   CircleCheck,
   Close,
   Collection,
+  DataAnalysis,
+  DataLine,
   Delete,
-  Download,
-  MagicStick,
   Operation,
+  Picture,
   Plus,
   Refresh,
-  Upload,
-  UploadFilled,
-  View
+  SwitchButton,
+  Upload
 } from '@element-plus/icons-vue'
 import { api, unwrap } from './api'
 
-const activeView = ref('workflow')
-const resultTab = ref('analysis')
-const photoFiles = ref<UploadFile[]>([])
-const selectedPhotoFile = ref<File | null>(null)
-const photo = ref<any>(null)
-const analysis = ref<any>(null)
-const adjustment = ref<any>(null)
-const evaluation = ref<any>(null)
-const xmpExport = ref<any>(null)
-const tuningSession = ref<any>(null)
-const tuningPrompt = ref('')
-const lightroomStatus = ref<any>(null)
-const targetStyle = ref('夜景电影感')
-const presetName = ref('TonePilot Preset')
-const modelProvider = ref('rule')
-
-const knowledgeList = ref<any[]>([])
+const activeView = ref('styles')
 const styles = ref<any[]>([])
 const adminKnowledge = ref<any[]>([])
-const selectedStyle = ref<any>(null)
-
-const knowledgeForm = reactive({
-  title: '夜景人像调色策略',
-  scene: '夜景人像',
-  targetStyle: '夜景电影感',
-  problems: '灯光高光偏亮,人物偏暗,背景绿色偏脏',
-  strategy: '降低高光，保留灯光细节\n提升阴影，恢复人物暗部\n降低绿色和黄色饱和度\n提高橙色明度，改善肤色'
-})
+const samples = ref<any[]>([])
+const llmCalls = ref<any[]>([])
+const auditEvents = ref<any[]>([])
+const knowledgeStatus = ref('')
+const sampleFile = ref<File | undefined>()
+const benchmarkSummary = ref('')
 
 const styleForm = reactive({
-  styleName: '日系清透人像',
-  styleCode: 'japanese_clear_portrait',
-  description: '整体明亮、低对比、肤色干净、绿色柔和。'
+  styleName: '夜景电影感',
+  styleCode: 'night_cinematic',
+  description: '压住高光、提亮暗部、增强对比和空气感，适合城市夜景与霓虹人像。',
+  suitableScenes: '城市夜景, 霓虹, 夜景人像',
+  avoidScenes: '高调日系, 儿童写真'
+})
+
+const knowledgeForm = reactive({
+  title: '夜景电影感调色策略',
+  scene: '城市夜景',
+  targetStyle: '夜景电影感',
+  problems: '灯光高光过亮, 暗部细节不足, 绿色偏脏',
+  strategy: '降低高光保留灯牌细节\n轻微提升阴影恢复暗部\n增加对比和去朦胧\n降低绿色饱和度并增加暗角聚焦'
+})
+
+const sampleForm = reactive({
+  styleId: undefined as number | undefined,
+  description: '夜景样片，灯牌高光明显，暗部有可恢复细节。',
+  tags: '夜景, 电影感, 霓虹'
 })
 
 const pageTitle = computed(() => {
   if (activeView.value === 'knowledge') return '调色知识库'
-  if (activeView.value === 'admin') return '风格管理'
-  return '调色链路'
+  if (activeView.value === 'samples') return '风格样片'
+  if (activeView.value === 'observability') return '观测与评估'
+  return '风格库'
 })
 
 const pageSubtitle = computed(() => {
-  if (activeView.value === 'knowledge') return '策略、场景、参数范围'
-  if (activeView.value === 'admin') return '风格、样本、审核状态'
-  return '照片分析、参数生成、评测、XMP'
+  if (activeView.value === 'knowledge') return '维护 Agent 可检索的场景策略、参数经验和审核状态'
+  if (activeView.value === 'samples') return '上传管理员样片，分析风格并生成可审核知识'
+  if (activeView.value === 'observability') return '查看 LLM 调用、审计事件和自动化评估结果'
+  return '维护用户端插件可引用的调色风格定义'
 })
 
-function onPhotoChange(file: UploadFile) {
-  selectedPhotoFile.value = file.raw ?? null
-  photoFiles.value = [file]
+watch(activeView, async value => {
+  if (value === 'samples') {
+    await Promise.all([loadStyles(), loadSamples()])
+  }
+  if (value === 'observability') {
+    await loadObservability()
+  }
+})
+
+function selectStyle(row: any) {
+  sampleForm.styleId = row.id
 }
 
-async function uploadPhoto() {
-  if (!selectedPhotoFile.value) return ElMessage.warning('请选择照片')
-  const form = new FormData()
-  form.append('file', selectedPhotoFile.value)
-  photo.value = await unwrap(api.post('/api/photos/upload', form))
-  analysis.value = null
-  adjustment.value = null
-  evaluation.value = null
-  xmpExport.value = null
-  tuningSession.value = null
-  ElMessage.success('已上传')
-}
-
-async function analyzePhoto() {
-  analysis.value = await unwrap(api.post(`/api/photos/${photo.value.id}/analyze`, null, {
-    params: { provider: modelProvider.value }
+async function createStyle() {
+  await unwrap(api.post('/api/admin/styles', {
+    styleName: styleForm.styleName,
+    styleCode: styleForm.styleCode,
+    description: styleForm.description,
+    suitableScenes: splitValues(styleForm.suitableScenes),
+    avoidScenes: splitValues(styleForm.avoidScenes),
+    status: 'enabled'
   }))
-  resultTab.value = 'analysis'
+  ElMessage.success('风格已保存')
+  await loadStyles()
 }
 
-async function generateAdjustment() {
-  adjustment.value = await unwrap(api.post('/api/agent/generate-adjustment', {
-    photoId: photo.value.id,
-    targetStyle: targetStyle.value,
-    provider: modelProvider.value
-  }))
-  await openTuningSession(adjustment.value.id)
-  resultTab.value = 'adjustment'
+async function loadStyles() {
+  styles.value = await unwrap(api.get('/api/admin/styles'))
+  if (!sampleForm.styleId && styles.value.length > 0) {
+    sampleForm.styleId = styles.value[0].id
+  }
 }
 
-async function evaluateAdjustment() {
-  evaluation.value = await unwrap(api.post('/api/evaluation/check', {
-    photoId: photo.value.id,
-    adjustmentId: adjustment.value.id
-  }))
-  resultTab.value = 'evaluation'
-}
-
-async function exportXmp() {
-  xmpExport.value = await unwrap(api.post('/api/xmp/export', {
-    photoId: photo.value.id,
-    adjustmentId: adjustment.value.id,
-    presetName: presetName.value
-  }))
-  resultTab.value = 'xmp'
-}
-
-async function startTuningSession() {
-  await openTuningSession(adjustment.value?.id)
-}
-
-async function openTuningSession(adjustmentId?: number) {
-  if (!photo.value) return ElMessage.warning('请先上传照片')
-  tuningSession.value = await unwrap(api.post('/api/tuning/sessions', {
-    photoId: photo.value.id,
-    adjustmentId
-  }))
-  adjustment.value = tuningSession.value.currentAdjustment
-  resultTab.value = 'session'
-}
-
-async function sendTuningMessage() {
-  if (!tuningSession.value || !tuningPrompt.value.trim()) return
-  tuningSession.value = await unwrap(api.post(`/api/tuning/sessions/${tuningSession.value.id}/messages`, {
-    message: tuningPrompt.value,
-    provider: modelProvider.value
-  }))
-  adjustment.value = tuningSession.value.currentAdjustment
-  tuningPrompt.value = ''
-  resultTab.value = 'session'
-}
-
-async function saveTuningResult() {
-  if (!tuningSession.value) return
-  tuningSession.value = await unwrap(api.post(`/api/tuning/sessions/${tuningSession.value.id}/save`, {
-    name: presetName.value || `${targetStyle.value} 微调版`
-  }))
-  adjustment.value = tuningSession.value.currentAdjustment
-  resultTab.value = 'adjustment'
-  ElMessage.success('已保存微调结果')
-}
-
-async function loadLightroomStatus() {
-  lightroomStatus.value = await unwrap(api.get('/api/tuning/lightroom/status'))
+async function deleteStyle(id: number) {
+  await unwrap(api.delete(`/api/admin/styles/${id}`))
+  ElMessage.success('风格已删除')
+  await loadStyles()
 }
 
 async function createKnowledge() {
@@ -404,41 +339,18 @@ async function createKnowledge() {
     strategy: splitValues(knowledgeForm.strategy),
     paramRanges: {
       highlights: '-30 ~ -60',
-      shadows: '+15 ~ +40',
-      greenSaturation: '-15 ~ -35',
-      orangeLuminance: '+5 ~ +20'
+      shadows: '+10 ~ +35',
+      dehaze: '+3 ~ +15',
+      greenSaturation: '-10 ~ -30'
     }
   }))
-  ElMessage.success('已保存')
-  await loadKnowledge()
-}
-
-async function loadKnowledge() {
-  knowledgeList.value = await unwrap(api.get('/api/knowledge'))
-}
-
-async function deleteKnowledge(id: number) {
-  await unwrap(api.delete(`/api/knowledge/${id}`))
-  await loadKnowledge()
-}
-
-async function createStyle() {
-  await unwrap(api.post('/api/admin/styles', {
-    ...styleForm,
-    suitableScenes: ['白天人像', '自然光人像', '校园写真'],
-    avoidScenes: ['夜景', '严重过曝照片'],
-    status: 'enabled'
-  }))
-  ElMessage.success('已创建')
-  await loadStyles()
-}
-
-async function loadStyles() {
-  styles.value = await unwrap(api.get('/api/admin/styles'))
+  ElMessage.success('知识已进入审核池')
+  await loadAdminKnowledge()
 }
 
 async function loadAdminKnowledge() {
-  adminKnowledge.value = await unwrap(api.get('/api/admin/knowledge'))
+  const params = knowledgeStatus.value ? { status: knowledgeStatus.value } : undefined
+  adminKnowledge.value = await unwrap(api.get('/api/admin/knowledge', { params }))
 }
 
 async function approveKnowledge(id: number) {
@@ -451,25 +363,72 @@ async function rejectKnowledge(id: number) {
   await loadAdminKnowledge()
 }
 
-function pretty(value: unknown) {
-  return value ? JSON.stringify(value, null, 2) : ''
+async function disableKnowledge(id: number) {
+  await unwrap(api.post(`/api/admin/knowledge/${id}/disable`))
+  await loadAdminKnowledge()
+}
+
+async function uploadSample() {
+  if (!sampleForm.styleId) {
+    ElMessage.warning('请先选择所属风格')
+    return
+  }
+  if (!sampleFile.value) {
+    ElMessage.warning('请选择一张成片样片')
+    return
+  }
+  const formData = new FormData()
+  formData.append('styleId', String(sampleForm.styleId))
+  formData.append('sampleType', 'final_only')
+  formData.append('sourceType', 'manual_upload')
+  formData.append('description', sampleForm.description)
+  splitValues(sampleForm.tags).forEach(tag => formData.append('tags', tag))
+  formData.append('finalImage', sampleFile.value)
+  await unwrap(api.post('/api/admin/style-samples/upload', formData))
+  ElMessage.success('样片已上传')
+  await loadSamples()
+}
+
+async function loadSamples() {
+  const params = sampleForm.styleId ? { styleId: sampleForm.styleId } : undefined
+  samples.value = await unwrap(api.get('/api/admin/style-samples', { params }))
+}
+
+function handleSampleFileChange(file: UploadFile) {
+  sampleFile.value = file.raw
+}
+
+async function analyzeSample(id: number) {
+  await unwrap(api.post(`/api/admin/style-samples/${id}/analyze`))
+  ElMessage.success('样片分析已完成')
+  await loadSamples()
+}
+
+async function generateKnowledge(id: number) {
+  await unwrap(api.post(`/api/admin/style-samples/${id}/generate-knowledge`))
+  ElMessage.success('已生成待审核知识')
+  await loadAdminKnowledge()
+}
+
+async function loadObservability() {
+  const [calls, events] = await Promise.all([
+    unwrap<any[]>(api.get('/api/observability/llm-calls', { params: { limit: 50 } })),
+    unwrap<any[]>(api.get('/api/observability/audit-events', { params: { limit: 50 } }))
+  ])
+  llmCalls.value = calls
+  auditEvents.value = events
+}
+
+async function runBenchmark() {
+  const report = await unwrap<any>(api.post('/api/evaluation/benchmark', {}))
+  benchmarkSummary.value = `评估完成：${report.caseResults?.length ?? 0} 个用例，综合分 ${report.averageScore ?? '-'}`
 }
 
 function splitValues(value: string) {
   return value.split(/[\n,，]/).map(item => item.trim()).filter(Boolean)
 }
 
-function fileUrl(url: string) {
-  if (!url) return ''
-  if (/^https?:\/\//.test(url)) return url
-  return url
-}
-
-function shortId(id: string) {
-  return id ? id.slice(0, 8) : ''
-}
-
 onMounted(async () => {
-  await Promise.all([loadKnowledge(), loadStyles(), loadAdminKnowledge(), loadLightroomStatus()])
+  await Promise.all([loadStyles(), loadAdminKnowledge()])
 })
 </script>
