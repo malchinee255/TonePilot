@@ -23,4 +23,17 @@ class AgentConsolePageTest {
         assertThat(html).contains("id=\"modelSettingsPanel\"");
         assertThat(html).contains("id=\"versionList\"");
     }
+
+    @Test
+    void clearsPromptImmediatelyAndShowsVisibleAgentSteps() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("prompt.value = ''");
+        assertThat(html).contains("addThinkingMessage");
+        assertThat(html).contains("Agent 执行过程");
+    }
 }

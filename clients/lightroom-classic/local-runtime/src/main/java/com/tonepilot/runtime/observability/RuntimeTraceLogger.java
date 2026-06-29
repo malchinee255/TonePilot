@@ -7,12 +7,16 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Component
 public class RuntimeTraceLogger {
+
+    private static final ZoneId LOG_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Autowired
     private RuntimeProperties properties;
@@ -36,8 +40,10 @@ public class RuntimeTraceLogger {
         try {
             var logDir = java.nio.file.Path.of(properties.getBridge().getRoot(), "logs");
             Files.createDirectories(logDir);
+            ZonedDateTime now = ZonedDateTime.now(LOG_ZONE);
             Map<String, Object> event = new LinkedHashMap<>();
-            event.put("timestamp", Instant.now().toString());
+            event.put("timestamp", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+            event.put("timestampEpochMillis", now.toInstant().toEpochMilli());
             event.put("level", level);
             event.put("step", step);
             event.put("sessionId", sessionId == null ? "" : sessionId);

@@ -1,5 +1,6 @@
 package com.tonepilot.runtime.observability;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tonepilot.runtime.config.RuntimeProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -7,6 +8,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,5 +34,9 @@ class RuntimeTraceLoggerTest {
         assertThat(content).contains("\"step\":\"agent.request.received\"");
         assertThat(content).contains("\"sessionId\":\"session-1\"");
         assertThat(content).contains("\"provider\":\"qwen2\"");
+        assertThat(content).contains("\"timestampEpochMillis\":");
+        assertThat(content).contains("+08:00");
+        String timestamp = new ObjectMapper().readTree(content).path("timestamp").asText();
+        assertThat(OffsetDateTime.parse(timestamp)).isNotNull();
     }
 }

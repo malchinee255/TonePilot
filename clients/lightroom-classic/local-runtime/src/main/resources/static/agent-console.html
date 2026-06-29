@@ -436,6 +436,40 @@
       white-space: pre-wrap;
     }
 
+    .thinking-steps {
+      margin-top: 10px;
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .thinking-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .thinking-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--muted);
+      flex: 0 0 auto;
+    }
+
+    .thinking-step.done .thinking-dot {
+      background: var(--ok);
+    }
+
+    .thinking-step.active .thinking-dot {
+      background: var(--accent);
+    }
+
+    .thinking-step.failed .thinking-dot {
+      background: var(--warn);
+    }
+
     .agent-actions {
       margin-top: 10px;
       display: flex;
@@ -1052,6 +1086,85 @@
       ].join(''))
       if (data.action === 'tool_submitted' && data.apply?.jobId) {
         pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
+      }
+    }
+
+    function addThinkingMessage() {
+      const node = document.createElement('div')
+      node.className = 'message agent thinking-message'
+      node.innerHTML = [
+        '<span class="role">Agent</span>',
+        '<strong>Agent 执行过程</strong>',
+        '<div class="thinking-steps">',
+        '<div class="thinking-step active" data-step="photo"><span class="thinking-dot"></span><span>读取 Lightroom 当前照片和调色上下文</span></div>',
+        '<div class="thinking-step" data-step="intent"><span class="thinking-dot"></span><span>分析用户意图和照片类型</span></div>',
+        '<div class="thinking-step" data-step="knowledge"><span class="thinking-dot"></span><span>检查知识库和可用工具能力</span></div>',
+        '<div class="thinking-step" data-step="model"><span class="thinking-dot"></span><span>调用大模型生成调色方案</span></div>',
+        '<div class="thinking-step" data-step="tool"><span class="thinking-dot"></span><span>解析参数并决定是否调用 Lightroom</span></div>',
+        '</div>'
+      ].join('')
+      chat.appendChild(node)
+      chat.scrollTop = chat.scrollHeight
+      return node
+    }
+
+    function markThinkingStatus(node, step, status) {
+      if (!node) return
+      const item = node.querySelector('[data-step="' + step + '"]')
+      if (!item) return
+      item.classList.remove('active', 'done', 'failed')
+      item.classList.add(status)
+    }
+
+    function finishThinking(node, failed) {
+      if (!node) return
+      node.querySelectorAll('.thinking-step').forEach(item => {
+        if (failed && !item.classList.contains('done')) {
+          item.classList.remove('active')
+          item.classList.add('failed')
+        } else if (!failed) {
+          item.classList.remove('active')
+          item.classList.add('done')
+        }
+      })
+    }
+
+    async function sendMessage() {
+      const message = prompt.value.trim()
+      if (!message) return
+      addMessage('user', escapeHtml(message))
+      prompt.value = ''
+      const thinking = addThinkingMessage()
+      send.disabled = true
+      setStatus(photoStatus, 'Agent 正在分析上下文...', '')
+      try {
+        markThinkingStatus(thinking, 'photo', 'done')
+        markThinkingStatus(thinking, 'intent', 'active')
+        const response = await fetch('/api/lightroom-agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, provider: provider.value, sessionId })
+        })
+        markThinkingStatus(thinking, 'intent', 'done')
+        markThinkingStatus(thinking, 'knowledge', 'done')
+        markThinkingStatus(thinking, 'model', 'active')
+        const result = await response.json()
+        if (!result.success) {
+          finishThinking(thinking, true)
+          addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(result.message || '未知错误'))
+          return
+        }
+        markThinkingStatus(thinking, 'model', 'done')
+        markThinkingStatus(thinking, 'tool', 'active')
+        sessionId = result.data.sessionId
+        renderAgentResult(result.data)
+        markThinkingStatus(thinking, 'tool', 'done')
+        finishThinking(thinking, false)
+      } catch (error) {
+        finishThinking(thinking, true)
+        addMessage('agent', '调用失败：' + escapeHtml(error.message))
+      } finally {
+        send.disabled = false
       }
     }
 
