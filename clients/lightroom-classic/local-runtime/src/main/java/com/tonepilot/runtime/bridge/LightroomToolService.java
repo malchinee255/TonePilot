@@ -33,7 +33,7 @@ public class LightroomToolService {
             String previewFileName = jobId + ".jpg";
             Path resultPath = paths.fs("apply-results", resultFileName);
             Path jobPath = paths.fs("apply-jobs", jobId + ".lua");
-            Files.writeString(jobPath, toLuaTable(Map.of(
+            Files.writeString(jobPath, "return " + toLuaTable(Map.of(
                     "id", jobId,
                     "resultPath", paths.lightroom("apply-results", resultFileName),
                     "previewFileName", previewFileName,
