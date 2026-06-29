@@ -18,6 +18,10 @@
           <el-icon><Collection /></el-icon>
           <span>知识库</span>
         </el-menu-item>
+        <el-menu-item index="materials">
+          <el-icon><Files /></el-icon>
+          <span>素材导入</span>
+        </el-menu-item>
         <el-menu-item index="samples">
           <el-icon><Picture /></el-icon>
           <span>样片管理</span>
@@ -134,6 +138,103 @@
         </div>
       </section>
 
+      <section v-if="activeView === 'materials'" class="grid two">
+        <div class="panel">
+          <div class="panel-title">
+            <h3>登记知识来源</h3>
+            <el-button :icon="Plus" type="primary" @click="createKnowledgeSource">保存来源</el-button>
+          </div>
+          <el-form label-position="top">
+            <el-form-item label="来源类型">
+              <el-select v-model="sourceForm.sourceType">
+                <el-option label="抖音调色教程" value="douyin_video" />
+                <el-option label="大师调色记录" value="master_edit_record" />
+                <el-option label="手工笔记" value="manual_note" />
+                <el-option label="风格样片" value="style_sample" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="来源标题">
+              <el-input v-model="sourceForm.title" placeholder="例如：夜景电影感调色教程" />
+            </el-form-item>
+            <el-form-item label="作者">
+              <el-input v-model="sourceForm.author" placeholder="教程作者或摄影师" />
+            </el-form-item>
+            <el-form-item label="原始链接">
+              <el-input v-model="sourceForm.originalUrl" placeholder="抖音链接、作品链接或记录来源" />
+            </el-form-item>
+            <el-form-item label="关联风格">
+              <el-select v-model="sourceForm.styleId" clearable placeholder="可选">
+                <el-option
+                  v-for="style in styles"
+                  :key="style.id"
+                  :label="style.styleName"
+                  :value="style.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="sourceForm.notes" type="textarea" :rows="4" />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <h3>素材与抽取</h3>
+            <el-button :icon="Refresh" @click="loadKnowledgeSources">刷新来源</el-button>
+          </div>
+
+          <el-table :data="knowledgeSources" height="180" highlight-current-row @row-click="selectKnowledgeSource">
+            <el-table-column prop="title" label="来源" min-width="180" />
+            <el-table-column prop="sourceType" label="类型" width="150" />
+            <el-table-column prop="author" label="作者" width="120" />
+          </el-table>
+
+          <el-divider />
+
+          <el-form label-position="top">
+            <el-form-item label="素材类型">
+              <el-select v-model="materialForm.materialType">
+                <el-option label="字幕/转写文本" value="transcript" />
+                <el-option label="教程摘要" value="summary" />
+                <el-option label="Lightroom 参数" value="lightroom_params" />
+                <el-option label="参数变化记录" value="param_delta" />
+                <el-option label="XMP 片段" value="xmp" />
+                <el-option label="手工文本" value="manual_text" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="素材标题">
+              <el-input v-model="materialForm.title" placeholder="例如：第 1 段字幕摘要" />
+            </el-form-item>
+            <el-form-item label="语言">
+              <el-input v-model="materialForm.language" />
+            </el-form-item>
+            <el-form-item label="素材内容">
+              <el-input v-model="materialForm.content" type="textarea" :rows="7" placeholder="粘贴字幕、教程摘要、调色参数或 XMP 内容" />
+            </el-form-item>
+            <el-button :icon="Upload" type="primary" @click="importKnowledgeMaterial">导入素材</el-button>
+          </el-form>
+
+          <el-divider />
+
+          <el-table :data="knowledgeMaterials" height="220">
+            <el-table-column prop="title" label="素材" min-width="180" />
+            <el-table-column prop="materialType" label="类型" width="150" />
+            <el-table-column width="120">
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  :loading="extractingMaterialId === row.id"
+                  @click="extractKnowledge(row.id)"
+                >
+                  生成知识
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </section>
+
       <section v-if="activeView === 'samples'" class="grid two">
         <div class="panel">
           <div class="panel-title">
@@ -144,7 +245,7 @@
             class="inline-alert"
             type="info"
             :closable="false"
-            title="样片只用于管理端沉淀风格知识；用户修图入口在 Lightroom 插件中。"
+            title="样片用于管理端沉淀风格知识；用户修图入口在 Lightroom 插件中。"
           />
           <el-form label-position="top">
             <el-form-item label="所属风格">
@@ -174,9 +275,7 @@
         <div class="panel">
           <div class="panel-title">
             <h3>样片列表</h3>
-            <div class="title-actions">
-              <el-button :icon="Refresh" @click="loadSamples">刷新</el-button>
-            </div>
+            <el-button :icon="Refresh" @click="loadSamples">刷新</el-button>
           </div>
           <el-table :data="samples" height="560">
             <el-table-column prop="description" label="说明" min-width="180" />
@@ -236,6 +335,7 @@ import {
   DataAnalysis,
   DataLine,
   Delete,
+  Files,
   Operation,
   Picture,
   Plus,
@@ -248,10 +348,14 @@ import { api, unwrap } from './api'
 const activeView = ref('styles')
 const styles = ref<any[]>([])
 const adminKnowledge = ref<any[]>([])
+const knowledgeSources = ref<any[]>([])
+const knowledgeMaterials = ref<any[]>([])
 const samples = ref<any[]>([])
 const llmCalls = ref<any[]>([])
 const auditEvents = ref<any[]>([])
 const knowledgeStatus = ref('')
+const selectedSourceId = ref<number | undefined>()
+const extractingMaterialId = ref<number | undefined>()
 const sampleFile = ref<File | undefined>()
 const benchmarkSummary = ref('')
 
@@ -271,6 +375,22 @@ const knowledgeForm = reactive({
   strategy: '降低高光保留灯牌细节\n轻微提升阴影恢复暗部\n增加对比和去朦胧\n降低绿色饱和度并增加暗角聚焦'
 })
 
+const sourceForm = reactive({
+  sourceType: 'douyin_video',
+  title: '夜景电影感调色教程',
+  author: '',
+  originalUrl: '',
+  styleId: undefined as number | undefined,
+  notes: ''
+})
+
+const materialForm = reactive({
+  materialType: 'transcript',
+  title: '字幕摘要',
+  content: '',
+  language: 'zh-CN'
+})
+
 const sampleForm = reactive({
   styleId: undefined as number | undefined,
   description: '夜景样片，灯牌高光明显，暗部有可恢复细节。',
@@ -279,6 +399,7 @@ const sampleForm = reactive({
 
 const pageTitle = computed(() => {
   if (activeView.value === 'knowledge') return '调色知识库'
+  if (activeView.value === 'materials') return '调色素材导入'
   if (activeView.value === 'samples') return '风格样片'
   if (activeView.value === 'observability') return '观测与评估'
   return '风格库'
@@ -286,12 +407,16 @@ const pageTitle = computed(() => {
 
 const pageSubtitle = computed(() => {
   if (activeView.value === 'knowledge') return '维护 Agent 可检索的场景策略、参数经验和审核状态'
+  if (activeView.value === 'materials') return '登记抖音教程、大师调色记录、手工笔记等来源，并抽取成待审核知识'
   if (activeView.value === 'samples') return '上传管理员样片，分析风格并生成可审核知识'
   if (activeView.value === 'observability') return '查看 LLM 调用、审计事件和自动化评估结果'
   return '维护用户端插件可引用的调色风格定义'
 })
 
 watch(activeView, async value => {
+  if (value === 'materials') {
+    await Promise.all([loadStyles(), loadKnowledgeSources()])
+  }
   if (value === 'samples') {
     await Promise.all([loadStyles(), loadSamples()])
   }
@@ -302,6 +427,7 @@ watch(activeView, async value => {
 
 function selectStyle(row: any) {
   sampleForm.styleId = row.id
+  sourceForm.styleId = row.id
 }
 
 async function createStyle() {
@@ -344,7 +470,7 @@ async function createKnowledge() {
       greenSaturation: '-10 ~ -30'
     }
   }))
-  ElMessage.success('知识已进入审核池')
+  ElMessage.success('知识已保存')
   await loadAdminKnowledge()
 }
 
@@ -366,6 +492,68 @@ async function rejectKnowledge(id: number) {
 async function disableKnowledge(id: number) {
   await unwrap(api.post(`/api/admin/knowledge/${id}/disable`))
   await loadAdminKnowledge()
+}
+
+async function createKnowledgeSource() {
+  const source = await unwrap<any>(api.post('/api/admin/knowledge-sources', {
+    sourceType: sourceForm.sourceType,
+    title: sourceForm.title,
+    author: sourceForm.author,
+    originalUrl: sourceForm.originalUrl,
+    styleId: sourceForm.styleId,
+    notes: sourceForm.notes
+  }))
+  selectedSourceId.value = source.id
+  ElMessage.success('素材来源已保存')
+  await loadKnowledgeSources()
+}
+
+async function loadKnowledgeSources() {
+  knowledgeSources.value = await unwrap(api.get('/api/admin/knowledge-sources'))
+  if (!selectedSourceId.value && knowledgeSources.value.length > 0) {
+    selectedSourceId.value = knowledgeSources.value[0].id
+  }
+  if (selectedSourceId.value) {
+    await loadKnowledgeMaterials(selectedSourceId.value)
+  }
+}
+
+async function selectKnowledgeSource(row: any) {
+  selectedSourceId.value = row.id
+  sourceForm.styleId = row.styleId
+  await loadKnowledgeMaterials(row.id)
+}
+
+async function loadKnowledgeMaterials(sourceId: number) {
+  knowledgeMaterials.value = await unwrap(api.get(`/api/admin/knowledge-sources/${sourceId}/materials`))
+}
+
+async function importKnowledgeMaterial() {
+  if (!selectedSourceId.value) {
+    ElMessage.warning('请先选择或创建一个素材来源')
+    return
+  }
+  await unwrap(api.post(`/api/admin/knowledge-sources/${selectedSourceId.value}/materials`, {
+    materialType: materialForm.materialType,
+    title: materialForm.title,
+    content: materialForm.content,
+    language: materialForm.language
+  }))
+  materialForm.content = ''
+  ElMessage.success('素材已导入')
+  await loadKnowledgeMaterials(selectedSourceId.value)
+}
+
+async function extractKnowledge(materialId: number) {
+  if (!selectedSourceId.value) return
+  extractingMaterialId.value = materialId
+  try {
+    await unwrap(api.post(`/api/admin/knowledge-sources/${selectedSourceId.value}/materials/${materialId}/extract`, {}))
+    ElMessage.success('已生成待审核知识')
+    await Promise.all([loadKnowledgeMaterials(selectedSourceId.value), loadAdminKnowledge()])
+  } finally {
+    extractingMaterialId.value = undefined
+  }
 }
 
 async function uploadSample() {
@@ -425,10 +613,10 @@ async function runBenchmark() {
 }
 
 function splitValues(value: string) {
-  return value.split(/[\n,，]/).map(item => item.trim()).filter(Boolean)
+  return value.split(/[\n,，]+/).map(item => item.trim()).filter(Boolean)
 }
 
 onMounted(async () => {
-  await Promise.all([loadStyles(), loadAdminKnowledge()])
+  await Promise.all([loadStyles(), loadAdminKnowledge(), loadKnowledgeSources()])
 })
 </script>
