@@ -1,0 +1,12 @@
+{
+  "name": "tonepilot-local-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TonePilot Lightroom Classic 本地运行时",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test bridge-paths.test.js plugin-console.test.js runtime-config.test.js local-rule-agent.test.js model-agent.test.js",
+    "check": "node --check server.js && node --check src/bridge-runtime.js && node --check src/runtime-config.js && node --check src/local-rule-agent.js && node --check src/model-agent.js"
+  }
+}

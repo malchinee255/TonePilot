@@ -25,20 +25,20 @@ function Test-Bridge {
 Write-LauncherLog "Starting TonePilot Agent console"
 
 if (-not (Test-Bridge)) {
-  Write-LauncherLog "Bridge is not responding; trying to restart WSL user service tonepilot-lightroom-bridge"
+  Write-LauncherLog "Local Runtime is not responding; trying to restart WSL user service tonepilot-local-runtime"
   $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
   if ($wsl) {
-    Start-Process -FilePath "wsl.exe" -ArgumentList @("-e", "systemctl", "--user", "restart", "tonepilot-lightroom-bridge") -WindowStyle Hidden
+    Start-Process -FilePath "wsl.exe" -ArgumentList @("-e", "bash", "-lc", "systemctl --user restart tonepilot-local-runtime || systemctl --user restart tonepilot-lightroom-bridge") -WindowStyle Hidden
     Start-Sleep -Seconds 3
   } else {
-    Write-LauncherLog "wsl.exe was not found; cannot auto-start WSL Bridge"
+    Write-LauncherLog "wsl.exe was not found; cannot auto-start TonePilot Local Runtime"
   }
 }
 
 if (Test-Bridge) {
-  Write-LauncherLog "Bridge is ready; opening console $consoleUrl"
+  Write-LauncherLog "Local Runtime is ready; opening console $consoleUrl"
 } else {
-  Write-LauncherLog "Bridge is still not responding; opening console for diagnostics"
+  Write-LauncherLog "Local Runtime is still not responding; opening console for diagnostics"
 }
 
 Start-Process $consoleUrl

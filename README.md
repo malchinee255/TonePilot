@@ -5,9 +5,9 @@ TonePilot 是一个非生成式 AI 摄影调色 Agent。系统不直接生成图
 当前工程保留两个产品端：
 
 - 管理端：Web 管理台，用于维护调色风格、样片、知识库、审核状态、可观测日志和自动评测。
-- 插件端：Lightroom Classic 用户端，摄影师在 Lightroom 中选中照片，通过 Agent 对话完成修图，并由插件把参数应用到当前照片。
+- 插件端：Lightroom Classic 用户端，摄影师在 Lightroom 中选中照片，通过 Agent 对话完成修图，并由本地运行时把参数应用到当前照片。
 
-后端作为 Agent 编排与管理服务，不提供浏览器修图工作台，不负责图片渲染，也不直接控制 Lightroom UI。真实修图效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
+管理端后端面向云端部署，负责知识库、样片、风格、观测和评测；摄影师日常修图不依赖管理端后端。Lightroom 插件端由 TonePilot Local Runtime 在本机完成对话、模型调用、本地规则兜底和 Lightroom 参数应用。真实修图效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
 
 ## 快速启动
 
@@ -65,10 +65,10 @@ docker compose up -d redis mysql minio
 
 ## Lightroom 插件端
 
-插件运行在 Windows 的 Lightroom Classic 中，Bridge 服务推荐运行在 WSL：
+插件运行在 Windows 的 Lightroom Classic 中。TonePilot Local Runtime 是用户侧核心，推荐运行在 WSL：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/bridge
+cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
 chmod +x start-bridge-wsl.sh
 ./start-bridge-wsl.sh
 ```
@@ -76,7 +76,7 @@ chmod +x start-bridge-wsl.sh
 第一次安装插件需要在 Windows PowerShell 执行：
 
 ```powershell
-cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\bridge
+cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
 .\install-plugin.ps1
 ```
 
@@ -91,21 +91,20 @@ Lightroom 中的入口：
 ```text
 Lightroom 当前选中照片
   -> Lua 插件读取照片信息和 Develop 参数
-  -> Bridge 打开 Agent 控制台
+  -> TonePilot Local Runtime 打开 Agent 控制台
   -> 用户用对话描述调色意图
-  -> Bridge 调用后端 /api/lightroom-agent/tune
-  -> 后端生成参数、参数差异和回复
-  -> Bridge 写入任务文件
+  -> Local Runtime 使用本地规则或用户配置的 OpenAI/Qwen 生成参数
+  -> Local Runtime 写入任务文件
   -> Lua 插件调用 photo:applyDevelopSettings 应用到当前照片
 ```
 
-Bridge 默认地址：
+Local Runtime 默认地址：
 
 ```text
 http://127.0.0.1:33335
 ```
 
-检查 Bridge 状态：
+检查 Local Runtime 状态：
 
 ```bash
 curl http://127.0.0.1:33335/status
@@ -178,11 +177,6 @@ TonePilot/
 │   ├── colorgrading/domain/         调色参数和值对象
 │   ├── domain/                      照片、风格、样片、知识等通用领域对象
 │   ├── evaluation/                  自动评测
-│   ├── lightroom/                   Lightroom 插件端 DDD 分层
-│   │   ├── domain/                  参数差异和调色计划
-│   │   ├── application/             调色应用服务和意图规划
-│   │   ├── infrastructure/          Develop Settings 映射
-│   │   └── interfaces/              插件端 REST API
 │   ├── observability/               LLM 调用日志和审计事件
 │   ├── persistence/                 数据库快照和恢复
 │   ├── service/                     管理端、RAG、样片、风格等业务服务
@@ -191,9 +185,9 @@ TonePilot/
 ├── frontend/                        Vue 3 管理端
 ├── clients/
 │   └── lightroom-classic/
-│       ├── bridge/                  本地 Bridge 服务、Agent 控制台、安装脚本和测试
-│       │   ├── server.js            Bridge 启动入口
-│       │   └── src/bridge-runtime.js Bridge 运行主体
+│       ├── local-runtime/           本地运行时、Agent 控制台、安装脚本和测试
+│       │   ├── server.js            本地运行时启动入口
+│       │   └── src/                 本地规则、模型适配、Lightroom 文件协议
 │       └── plugin/                  Lightroom Classic Lua 插件源码
 ├── docs/                            架构说明
 ├── scripts/                         本地启动脚本
@@ -202,9 +196,13 @@ TonePilot/
 
 ## 核心 API
 
-插件端：
+插件端本地运行时：
 
-- `POST /api/lightroom-agent/tune`
+- `GET /status`
+- `GET /api/lightroom/selected-photo`
+- `GET /api/runtime/config`
+- `POST /api/runtime/config`
+- `POST /api/lightroom-agent/chat`
 
 管理端：
 
@@ -232,16 +230,12 @@ TonePilot/
 - `GET /api/observability/audit-events`
 - `POST /api/evaluation/benchmark`
 
-## 后端 Agent 编排职责
+## Agent 编排职责
 
-后端不直接渲染照片，也不直接控制 Lightroom UI。它负责：
+TonePilot 分为两类 Agent 编排：
 
-- 解析用户调色意图。
-- 使用风格知识库进行 RAG 检索。
-- 生成 Lightroom Develop 参数。
-- 校验参数范围，避免越界或过激调整。
-- 输出本轮参数 diff、原因和对话回复。
-- 记录 LLM 调用、审计事件和自动评测结果。
+- 插件端 Local Runtime：负责 Lightroom 用户修图会话，读取当前照片状态，分析用户意图，使用本地规则或用户配置的 OpenAI/Qwen 生成本轮 Develop Settings，并把任务交给 Lua 插件应用到当前照片。
+- 管理端后端：负责云端知识库、样片分析、风格维护、RAG、自动评测和观测日志。它不直接控制本机 Lightroom，也不是摄影师日常修图的必需依赖。
 
 ## 验证命令
 
@@ -259,10 +253,10 @@ cd /home/lvchanghong/Code/TonePilot/frontend
 npm run build
 ```
 
-Bridge 测试：
+Local Runtime 测试：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/bridge
+cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
 npm test
 npm run check
 ```

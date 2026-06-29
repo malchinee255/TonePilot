@@ -19,9 +19,9 @@ export TONEPILOT_LIGHTROOM_BRIDGE_PUBLIC_URL="${TONEPILOT_LIGHTROOM_BRIDGE_PUBLI
 export TONEPILOT_LIGHTROOM_BRIDGE_ROOT="${TONEPILOT_LIGHTROOM_BRIDGE_ROOT:-${windows_home}/.tonepilot-lightroom-bridge}"
 export TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT="$lightroom_root"
 
-echo "[TonePilot Bridge] WSL 启动"
-echo "[TonePilot Bridge] Bridge 文件目录: ${TONEPILOT_LIGHTROOM_BRIDGE_ROOT}"
-echo "[TonePilot Bridge] Lightroom 任务目录: ${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT}"
-echo "[TonePilot Bridge] 监听地址: ${TONEPILOT_LIGHTROOM_BRIDGE_PUBLIC_URL}"
+echo "[TonePilot Local Runtime] WSL 启动"
+echo "[TonePilot Local Runtime] 运行时目录: ${TONEPILOT_LIGHTROOM_BRIDGE_ROOT}"
+echo "[TonePilot Local Runtime] Lightroom 任务目录: ${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT}"
+echo "[TonePilot Local Runtime] 监听地址: ${TONEPILOT_LIGHTROOM_BRIDGE_PUBLIC_URL}"
 
 node server.js

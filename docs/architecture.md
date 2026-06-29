@@ -7,26 +7,26 @@ TonePilot 保留两个产品端：
 - 管理端：Web 管理台，维护风格、样片、知识库、审核、观测和评测。
 - 插件端：Lightroom Classic 用户端，摄影师直接在 Lightroom 中对话修图。
 
-后端不再做浏览器用户修图工作台，不维护旧 `/api/tuning` 会话，不做 Java2D 图片预览渲染，也不把 XMP 导出作为主要交付方式。真实效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
+管理端后端不再做浏览器用户修图工作台，不维护旧 `/api/tuning` 会话，不做 Java2D 图片预览渲染，也不把 XMP 导出作为主要交付方式。用户修图发生在 Lightroom 插件端和 TonePilot Local Runtime 中；真实效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
 
 ## 插件端链路
 
 ```mermaid
 flowchart LR
   A["Lightroom 当前选中照片"] --> B["Lua 插件读取照片信息和 Develop 参数"]
-  B --> C["Bridge Agent 控制台"]
+  B --> C["Local Runtime Agent 控制台"]
   C --> D["用户输入调色指令"]
-  D --> E["POST /api/lightroom-agent/tune"]
-  E --> F["后端 Agent 生成参数"]
+  D --> E["本地规则或 OpenAI/Qwen"]
+  E --> F["Local Runtime 生成参数"]
   F --> G["参数 diff 和 Develop Settings"]
-  G --> H["Bridge 写入任务文件"]
+  G --> H["Local Runtime 写入任务文件"]
   H --> I["Lua 插件 applyDevelopSettings"]
   I --> J["Lightroom 显示真实调色结果"]
 ```
 
 Lightroom 自身负责实时预览、撤销、保存和复制设置。TonePilot 只生成参数决策。
 
-## 后端 Agent 工作流
+## 管理端 Agent 工作流
 
 后端采用可控状态机式多 Agent，而不是开放自治 Agent。中心编排器负责顺序、条件、重试和 trace，单个 Agent 只承担明确职责。
 
@@ -93,34 +93,36 @@ flowchart LR
 
 ## Lightroom Classic 客户端
 
-Lightroom Classic 用户端放在 `clients/lightroom-classic`，结构上接近 Neurapix 这类 Lightroom AI 插件：插件负责入口和本机执行，Bridge 负责本地通信，后端负责 AI/Agent。
+Lightroom Classic 用户端放在 `clients/lightroom-classic`，结构上接近 Neurapix 这类 Lightroom AI 插件：插件负责入口和本机执行，TonePilot Local Runtime 负责本地通信、模型配置、规则兜底和参数生成。管理端后端仅提供可选的云端知识和样片能力。
 
 ```text
 clients/lightroom-classic/
-├── bridge/     本地 Bridge 服务、Agent 控制台、安装脚本和测试
+├── local-runtime/     本地运行时、Agent 控制台、安装脚本和测试
 │   ├── server.js
 │   └── src/bridge-runtime.js
 └── plugin/     Lightroom Classic Lua 插件源码
 ```
 
-Lightroom Classic 插件运行在 Windows Lightroom 进程内，本地 Bridge 可以运行在 WSL 或 Windows。
+Lightroom Classic 插件运行在 Windows Lightroom 进程内，本地 Local Runtime 可以运行在 WSL、Windows 或未来单独打包的桌面进程中。
 
 ```mermaid
 flowchart LR
   A["Lightroom Lua 插件"] --> B["selected-photo.json"]
-  C["Bridge server.js"] --> B
+  C["Local Runtime server.js"] --> B
   C --> D["Agent 控制台"]
   D --> C
-  C --> E["后端 /api/lightroom-agent/tune"]
+  C --> E["本地规则 / OpenAI / Qwen"]
   E --> C
   C --> F["apply-jobs"]
   F --> A
 ```
 
-Bridge 暴露本地接口：
+Local Runtime 暴露本地接口：
 
 - `GET /status`
 - `GET /api/lightroom/selected-photo`
+- `GET /api/runtime/config`
+- `POST /api/runtime/config`
 - `POST /api/lightroom-agent/chat`
 - `GET /agent-console`
 
@@ -151,9 +153,13 @@ Bridge 暴露本地接口：
 
 ## 主要接口
 
-插件端：
+插件端本地运行时：
 
-- `POST /api/lightroom-agent/tune`
+- `GET /status`
+- `GET /api/lightroom/selected-photo`
+- `POST /api/lightroom-agent/chat`
+- `GET /api/runtime/config`
+- `POST /api/runtime/config`
 
 管理端：
 

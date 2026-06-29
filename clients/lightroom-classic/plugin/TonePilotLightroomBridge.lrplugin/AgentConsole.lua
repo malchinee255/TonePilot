@@ -31,7 +31,7 @@ LrTasks.startAsyncTask(function()
     if not ok then
         LrDialogs.message(
             "TonePilot Agent 控制台",
-            "无法打开深灰 Agent 控制台：" .. tostring(errorMessage) .. "\n请确认 Bridge 服务已启动。",
+            "无法打开深灰 Agent 控制台：" .. tostring(errorMessage) .. "\n请确认 TonePilot Local Runtime 已启动。",
             "critical"
         )
     end

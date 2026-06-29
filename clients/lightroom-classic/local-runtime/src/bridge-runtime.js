@@ -4,10 +4,12 @@ const http = require('http')
 const path = require('path')
 const url = require('url')
 const { createBridgePaths } = require('../bridge-paths')
+const { createRuleTune } = require('./local-rule-agent')
+const { createModelTune } = require('./model-agent')
+const { readRuntimeConfig, writeRuntimeConfig, publicRuntimeConfig } = require('./runtime-config')
 
 const port = Number(process.env.TONEPILOT_LIGHTROOM_BRIDGE_PORT || 47917)
 const host = process.env.TONEPILOT_LIGHTROOM_BRIDGE_HOST || '0.0.0.0'
-const backendBaseUrl = (process.env.TONEPILOT_BACKEND_URL || 'http://127.0.0.1:8080').replace(/\/$/, '')
 const bridgePaths = createBridgePaths()
 const bridgeRoot = bridgePaths.fsRoot
 const applyJobsDir = bridgePaths.fs('apply-jobs')
@@ -19,6 +21,7 @@ const agentResultsDir = bridgePaths.fs('agent-results')
 const heartbeatPath = bridgePaths.fs('heartbeat.txt')
 const selectedPhotoPath = bridgePaths.fs('selected-photo.json')
 const sessionsPath = bridgePaths.fs('sessions.json')
+const runtimeConfigPath = bridgePaths.fs('runtime-config.json')
 
 ensureDirectory(applyJobsDir)
 ensureDirectory(processingDir)
@@ -54,6 +57,18 @@ const server = http.createServer(async (request, response) => {
       return
     }
 
+    if (request.method === 'GET' && parsedUrl.pathname === '/api/runtime/config') {
+      respondJson(response, publicRuntimeConfig(readRuntimeConfig(runtimeConfigPath)))
+      return
+    }
+
+    if (request.method === 'POST' && parsedUrl.pathname === '/api/runtime/config') {
+      const body = await readRequestBody(request)
+      const payload = JSON.parse(body || '{}')
+      respondJson(response, publicRuntimeConfig(writeRuntimeConfig(runtimeConfigPath, payload)))
+      return
+    }
+
     if (request.method === 'POST' && parsedUrl.pathname === '/api/lightroom-agent/chat') {
       const body = await readRequestBody(request)
       const payload = JSON.parse(body || '{}')
@@ -74,10 +89,9 @@ const server = http.createServer(async (request, response) => {
 })
 
 server.listen(port, host, () => {
-  console.log(`[TonePilot Bridge] 服务已启动: http://${host}:${port}`)
-  console.log(`[TonePilot Bridge] Bridge 文件目录: ${bridgeRoot}`)
-  console.log(`[TonePilot Bridge] Lightroom 任务目录: ${bridgePaths.lightroomRoot}`)
-  console.log(`[TonePilot Bridge] 后端地址: ${backendBaseUrl}`)
+  console.log(`[TonePilot Local Runtime] 服务已启动: http://${host}:${port}`)
+  console.log(`[TonePilot Local Runtime] 运行时目录: ${bridgeRoot}`)
+  console.log(`[TonePilot Local Runtime] Lightroom 任务目录: ${bridgePaths.lightroomRoot}`)
 })
 
 function statusPayload() {
@@ -85,8 +99,8 @@ function statusPayload() {
   if (!heartbeat) {
     return {
       available: false,
-      mode: 'lightroom-classic-bridge',
-      message: 'Bridge 服务已启动，但 Lightroom 插件尚未写入心跳。请确认 Lightroom Classic 已启用 TonePilot 插件。',
+      mode: 'lightroom-classic-local-runtime',
+      message: 'TonePilot Local Runtime 已启动，但 Lightroom 插件尚未写入心跳。请确认 Lightroom Classic 已启用 TonePilot 插件。',
       nextSteps: [
         '在 Lightroom Classic 插件管理器中添加 TonePilotLightroomBridge.lrplugin',
         '保持 Lightroom Classic 打开，并选中要修图的照片',
@@ -97,8 +111,8 @@ function statusPayload() {
 
   return {
     available: true,
-    mode: 'lightroom-classic-bridge',
-    message: `Lightroom Bridge 已连接，最近心跳 ${heartbeat.ageSeconds} 秒前。`,
+    mode: 'lightroom-classic-local-runtime',
+    message: `TonePilot Local Runtime 已连接，最近心跳 ${heartbeat.ageSeconds} 秒前。`,
     nextSteps: []
   }
 }
@@ -120,27 +134,28 @@ async function createAgentChat(payload) {
 
   const sessionContext = ensurePhotoSession(selected)
   const analysis = buildPhotoAnalysis(selected, payload.message)
-  const backendResponse = await fetch(`${backendBaseUrl}/api/lightroom-agent/tune`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: payload.sessionId || `agent-console-${Date.now()}`,
-      localPhotoId: selected.photo?.fileName || '',
-      message: enrichMessage(payload.message, analysis),
-      provider: payload.provider || 'rule',
-      currentAdjustment: selected.currentAdjustment || null,
-      photoMetadata: selected.photo || null
+  const runtimeConfig = readRuntimeConfig(runtimeConfigPath)
+  const tunePayload = {
+    sessionId: payload.sessionId || `agent-console-${Date.now()}`,
+    localPhotoId: selected.photo?.fileName || '',
+    message: enrichMessage(payload.message, analysis),
+    provider: payload.provider || runtimeConfig.provider || 'rule',
+    currentAdjustment: selected.currentAdjustment || null,
+    photoMetadata: selected.photo || null
+  }
+  const agentData = await createModelTune({
+    payload: tunePayload,
+    selected,
+    analysis,
+    config: runtimeConfig,
+    fallbackTune: () => createRuleTune({
+      sessionId: tunePayload.sessionId,
+      localPhotoId: tunePayload.localPhotoId,
+      message: payload.message,
+      currentAdjustment: selected.currentAdjustment || null
     })
   })
-  const backendData = await backendResponse.json()
-  if (!backendResponse.ok || backendData.success === false) {
-    return {
-      success: false,
-      message: backendData.message || `后端 Agent 调用失败，HTTP ${backendResponse.status}`
-    }
-  }
 
-  const agentData = backendData.data
   const applyResult = await applyDevelopSettingsInLightroom(agentData.developSettings || {})
   const version = applyResult.success ? recordSessionVersion(sessionContext, {
     userIntent: payload.message,
@@ -415,35 +430,41 @@ async function processAgentRequest(requestPath) {
   const resultPath = path.join(agentResultsDir, `${jobId}.lua`)
   try {
     const payload = JSON.parse(fs.readFileSync(requestPath, 'utf8').replace(/^\uFEFF/, ''))
-    const backendResponse = await fetch(`${backendBaseUrl}/api/lightroom-agent/tune`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: payload.sessionId || jobId,
-        localPhotoId: payload.localPhotoId || '',
+    const selected = {
+      photo: payload.photoMetadata || {},
+      currentAdjustment: payload.currentAdjustment || null
+    }
+    const runtimeConfig = readRuntimeConfig(runtimeConfigPath)
+    const analysis = buildPhotoAnalysis(selected, payload.message || '')
+    const tunePayload = {
+      sessionId: payload.sessionId || jobId,
+      localPhotoId: payload.localPhotoId || selected.photo?.fileName || '',
+      message: enrichMessage(payload.message || '', analysis),
+      provider: payload.provider || runtimeConfig.provider || 'rule',
+      currentAdjustment: selected.currentAdjustment,
+      photoMetadata: selected.photo
+    }
+    const data = await createModelTune({
+      payload: tunePayload,
+      selected,
+      analysis,
+      config: runtimeConfig,
+      fallbackTune: () => createRuleTune({
+        sessionId: tunePayload.sessionId,
+        localPhotoId: tunePayload.localPhotoId,
         message: payload.message || '',
-        provider: payload.provider || 'rule',
-        currentAdjustment: payload.currentAdjustment || null,
-        photoMetadata: payload.photoMetadata || null
+        currentAdjustment: selected.currentAdjustment
       })
     })
-    const data = await backendResponse.json()
-    if (!backendResponse.ok || data.success === false) {
-      writeLuaResult(resultPath, {
-        success: false,
-        message: data.message || `后端 Agent 调用失败，HTTP ${backendResponse.status}`
-      })
-      return
-    }
     writeLuaResult(resultPath, {
       success: true,
-      message: data.data?.assistantMessage || 'TonePilot Agent 已生成调色参数。',
-      response: data.data
+      message: data.assistantMessage || 'TonePilot Agent 已生成调色参数。',
+      response: data
     })
   } catch (error) {
     writeLuaResult(resultPath, {
       success: false,
-      message: `调用 TonePilot 后端 Agent 失败：${error.message}`
+      message: `调用 TonePilot Local Runtime Agent 失败：${error.message}`
     })
   } finally {
     fs.rmSync(requestPath, { force: true })
@@ -863,12 +884,34 @@ function agentConsoleHtml() {
       font-size: 12px;
       font-weight: 600;
     }
-    textarea, select, button {
+    .model-config {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 90px;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #242424;
+    }
+    .model-config label {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+    textarea, select, button, input {
       color: var(--text);
       background: var(--panel-2);
       border: 1px solid var(--line);
       border-radius: 4px;
       font: inherit;
+    }
+    input {
+      min-height: 30px;
+      padding: 0 8px;
+      outline: none;
     }
     textarea {
       width: 100%;
@@ -916,6 +959,7 @@ function agentConsoleHtml() {
       aside { display: none; }
       .composer { grid-template-columns: 1fr; }
       .actions { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
+      .model-config { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -989,6 +1033,12 @@ function agentConsoleHtml() {
           </select>
           <button id="send" class="primary">发送并修图</button>
         </div>
+        <div class="model-config">
+          <label>Base URL<input id="modelBaseUrl" placeholder="本地规则无需填写" /></label>
+          <label>模型<input id="modelName" placeholder="例如 qwen-plus / gpt-4o-mini" /></label>
+          <label>API Key<input id="modelApiKey" type="password" placeholder="保存在本机运行时" /></label>
+          <button id="saveRuntimeConfig" type="button">保存设置</button>
+        </div>
       </footer>
     </main>
   </div>
@@ -1008,6 +1058,10 @@ function agentConsoleHtml() {
     const prompt = document.querySelector('#prompt')
     const provider = document.querySelector('#provider')
     const send = document.querySelector('#send')
+    const modelBaseUrl = document.querySelector('#modelBaseUrl')
+    const modelName = document.querySelector('#modelName')
+    const modelApiKey = document.querySelector('#modelApiKey')
+    const saveRuntimeConfig = document.querySelector('#saveRuntimeConfig')
     let currentPhoto = null
     let sessionId = null
     let currentPreviewUrl = null
@@ -1015,6 +1069,7 @@ function agentConsoleHtml() {
     let comparisonActive = false
     let comparisonPhotoName = ''
     let comparisonPhotoKey = ''
+    let runtimeConfig = null
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
@@ -1172,6 +1227,54 @@ function agentConsoleHtml() {
       }
     }
 
+    async function loadRuntimeConfig() {
+      try {
+        const response = await fetch('/api/runtime/config')
+        runtimeConfig = await response.json()
+        provider.value = runtimeConfig.provider || 'rule'
+        renderProviderConfig()
+      } catch (error) {
+        addMessage('agent', '读取本地模型配置失败：' + escapeHtml(error.message))
+      }
+    }
+
+    function renderProviderConfig() {
+      const value = provider.value || 'rule'
+      const config = runtimeConfig?.[value] || {}
+      modelBaseUrl.value = config.baseUrl || ''
+      modelName.value = config.model || ''
+      modelApiKey.value = ''
+      modelBaseUrl.disabled = value === 'rule'
+      modelName.disabled = value === 'rule'
+      modelApiKey.disabled = value === 'rule'
+      saveRuntimeConfig.disabled = value === 'rule'
+      modelApiKey.placeholder = value === 'rule'
+        ? '本地规则无需填写'
+        : (config.apiKeyConfigured ? '已配置，留空则不修改' : '保存在本机运行时')
+    }
+
+    async function saveConfig() {
+      const value = provider.value || 'rule'
+      const patch = { provider: value }
+      if (value !== 'rule') {
+        patch[value] = {
+          baseUrl: modelBaseUrl.value.trim(),
+          model: modelName.value.trim()
+        }
+        if (modelApiKey.value.trim()) {
+          patch[value].apiKey = modelApiKey.value.trim()
+        }
+      }
+      const response = await fetch('/api/runtime/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      })
+      runtimeConfig = await response.json()
+      renderProviderConfig()
+      addMessage('agent', '本地模型设置已保存。')
+    }
+
     function renderAgentResult(data) {
       const analysis = data.analysis || {}
       const basis = (analysis.basis || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
@@ -1252,10 +1355,13 @@ function agentConsoleHtml() {
         sendMessage()
       })
     })
+    provider.addEventListener('change', renderProviderConfig)
+    saveRuntimeConfig.addEventListener('click', saveConfig)
     send.addEventListener('click', sendMessage)
     prompt.addEventListener('keydown', event => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) sendMessage()
     })
+    loadRuntimeConfig()
     pollPhoto()
     setInterval(pollPhoto, 1500)
   </script>
