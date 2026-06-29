@@ -111,15 +111,21 @@ public class ModelRuntimeAgent {
                     new TypeReference<Map<String, Object>>() {
                     }
             );
-            if (developSettings == null || developSettings.isEmpty()) {
-                traceLogger.warn("model.parse.empty_settings", "", Map.of());
-                return fallback.get();
-            }
             AgentTuneResult ruleShape = ruleAgent.plan(new AgentInput(input.message(), input.currentSettings()));
             Map<String, Object> analysis = json.has("analysis")
                     ? objectMapper.convertValue(json.path("analysis"), new TypeReference<>() {
                     })
                     : ruleShape.analysis();
+            if (developSettings == null || developSettings.isEmpty()) {
+                traceLogger.info("model.parse.analysis_only", "", Map.of("hasAnalysis", json.has("analysis")));
+                return new AgentTuneResult(
+                        json.path("assistantMessage").asText("我已经完成照片分析，本轮不需要修改 Lightroom 参数。"),
+                        Map.of(),
+                        List.of(),
+                        analysis,
+                        content
+                );
+            }
             traceLogger.info("model.parse.succeeded", "", Map.of(
                     "settingCount", developSettings.size(),
                     "hasAnalysis", json.has("analysis")

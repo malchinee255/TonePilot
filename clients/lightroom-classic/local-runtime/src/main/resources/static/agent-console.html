@@ -993,6 +993,34 @@
       }
     }
 
+    function renderAgentResult(data) {
+      const analysis = data.analysis || {}
+      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
+      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
+      analysisSummary.innerHTML = [
+        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
+        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
+        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
+      ].join('')
+      if (data.beforePreviewUrl || data.afterPreviewUrl) {
+        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
+      }
+      const toolText = data.action === 'tool_submitted'
+        ? '<div class="agent-block">我已经调用 Lightroom 工具，正在等待本地插件处理完成。</div>'
+        : ''
+      addMessage('agent', [
+        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
+        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
+        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
+        deltas ? '<div class="agent-block"><strong>修改参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
+        toolText,
+        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : ''
+      ].join(''))
+      if (data.action === 'tool_submitted' && data.apply?.jobId) {
+        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
+      }
+    }
+
     document.querySelectorAll('[data-prompt]').forEach(button => {
       button.addEventListener('click', () => {
         prompt.value = button.dataset.prompt || ''
