@@ -425,6 +425,24 @@
       white-space: nowrap;
     }
 
+    .agent-block {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #202020;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .agent-actions {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
     .composer {
       padding: 12px 22px 16px;
       border-top: 1px solid var(--line);
@@ -614,7 +632,7 @@
         </div>
         <textarea id="prompt" placeholder="例如：先分析这张照片，修成夜景电影感，再亮一点">先分析这张照片，修成夜景电影感，再亮一点</textarea>
         <div class="actions">
-          <button id="send" class="primary" type="button">发送并修图</button>
+          <button id="send" class="primary" type="button">发送</button>
         </div>
       </footer>
     </main>
@@ -883,6 +901,91 @@
         renderAgentResult(result.data)
         prompt.value = ''
         await pollPhoto()
+      } catch (error) {
+        addMessage('agent', '调用失败：' + escapeHtml(error.message))
+      } finally {
+        send.disabled = false
+      }
+    }
+
+    function renderAgentResult(data) {
+      const analysis = data.analysis || {}
+      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
+      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
+      const suggestedReplies = (data.suggestedReplies || []).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
+      analysisSummary.innerHTML = [
+        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
+        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
+        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
+      ].join('')
+      if (data.beforePreviewUrl || data.afterPreviewUrl) {
+        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
+      }
+      addMessage('agent', [
+        '<div><strong>Agent 决策：</strong>' + escapeHtml(data.action || 'respond') + '</div>',
+        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
+        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
+        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
+        deltas ? '<div class="agent-block"><strong>拟修改参数</strong><div class="deltas">' + deltas + '</div></div>' : '<div class="agent-block">本轮没有拟修改参数。</div>',
+        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : '',
+        suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
+      ].join(''))
+      chat.querySelectorAll('button[data-reply]').forEach(button => {
+        button.addEventListener('click', () => {
+          prompt.value = button.dataset.reply || ''
+          sendMessage()
+        })
+      })
+      if (data.action === 'tool_submitted' && data.apply?.jobId) {
+        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
+      }
+    }
+
+    async function pollApplyStatus(jobId, beforeUrl) {
+      setStatus(photoStatus, 'Lightroom 正在处理调色任务...', '')
+      const timer = window.setInterval(async () => {
+        try {
+          const response = await fetch('/api/lightroom-agent/apply-status/' + encodeURIComponent(jobId))
+          const result = await response.json()
+          if (result.pending) return
+          window.clearInterval(timer)
+          if (!result.success) {
+            addMessage('agent', 'Lightroom 工具执行失败：' + escapeHtml(result.message || '未知错误'))
+            setStatus(photoStatus, 'Lightroom 工具执行失败', 'warn')
+            return
+          }
+          const afterUrl = result.previewUrl || ''
+          setComparison(beforeUrl || lastBeforeUrl, afterUrl, currentPhoto?.photo?.fileName || '', '', jobId)
+          addMessage('agent', 'Lightroom 已完成调色。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
+          setStatus(photoStatus, 'Lightroom 已完成调色', 'ok')
+          await pollPhoto()
+        } catch (error) {
+          window.clearInterval(timer)
+          addMessage('agent', '读取 Lightroom 工具状态失败：' + escapeHtml(error.message))
+        }
+      }, 1500)
+    }
+
+    async function sendMessage() {
+      const message = prompt.value.trim()
+      if (!message) return
+      addMessage('user', escapeHtml(message))
+      send.disabled = true
+      setStatus(photoStatus, 'Agent 正在分析上下文...', '')
+      try {
+        const response = await fetch('/api/lightroom-agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, provider: provider.value, sessionId })
+        })
+        const result = await response.json()
+        if (!result.success) {
+          addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(result.message || '未知错误'))
+          return
+        }
+        sessionId = result.data.sessionId
+        renderAgentResult(result.data)
+        prompt.value = ''
       } catch (error) {
         addMessage('agent', '调用失败：' + escapeHtml(error.message))
       } finally {

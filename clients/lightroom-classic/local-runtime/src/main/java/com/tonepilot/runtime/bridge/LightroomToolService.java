@@ -1,21 +1,16 @@
 package com.tonepilot.runtime.bridge;
 
-import com.tonepilot.runtime.config.RuntimeProperties;
 import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class LightroomToolService {
-
-    @Autowired
-    private RuntimeProperties properties;
 
     @Autowired
     private LightroomStateService stateService;
@@ -31,10 +26,6 @@ public class LightroomToolService {
         String jobId = "agent-apply-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6);
         try {
             BridgePaths paths = stateService.bridgePaths();
-            traceLogger.info("lightroom.apply.prepare", jobId, Map.of(
-                    "settingCount", developSettings.size(),
-                    "bridgeRoot", paths.fsRoot().toString()
-            ));
             Files.createDirectories(paths.fs("apply-jobs"));
             Files.createDirectories(paths.fs("apply-results"));
             Files.createDirectories(paths.fs("results"));
@@ -43,6 +34,7 @@ public class LightroomToolService {
             Path resultPath = paths.fs("apply-results", resultFileName);
             Path jobPath = paths.fs("apply-jobs", jobId + ".lua");
             traceLogger.info("lightroom.apply.job.writing", jobId, Map.of(
+                    "settingCount", developSettings.size(),
                     "jobPath", jobPath.toString(),
                     "resultPath", resultPath.toString(),
                     "previewFileName", previewFileName
@@ -54,9 +46,14 @@ public class LightroomToolService {
                     "previewPath", paths.lightroom("results", previewFileName),
                     "developSettings", developSettings
             )));
-            traceLogger.info("lightroom.apply.job.written", jobId, Map.of("jobPath", jobPath.toString()));
-            Map<String, Object> result = waitForResult(jobId, resultPath, Duration.ofMillis(properties.getBridge().getApplyTimeoutMs()));
-            traceLogger.info("lightroom.apply.finished", jobId, result);
+            Map<String, Object> result = Map.of(
+                    "success", true,
+                    "pending", true,
+                    "jobId", jobId,
+                    "message", "已提交 Lightroom 调色任务，等待插件处理完成。",
+                    "previewFileName", previewFileName
+            );
+            traceLogger.info("lightroom.apply.submitted", jobId, result);
             return result;
         } catch (Exception exception) {
             traceLogger.error("lightroom.apply.failed", jobId, Map.of("error", exception.getMessage()));
@@ -64,28 +61,27 @@ public class LightroomToolService {
         }
     }
 
-    private Map<String, Object> waitForResult(String jobId, Path resultPath, Duration timeout) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeout.toMillis();
-        traceLogger.info("lightroom.apply.waiting", jobId, Map.of(
-                "resultPath", resultPath.toString(),
-                "timeoutMs", timeout.toMillis()
-        ));
-        while (System.currentTimeMillis() < deadline) {
-            if (Files.exists(resultPath)) {
-                return parseResult(jobId, resultPath);
-            }
-            Thread.sleep(500);
+    public Map<String, Object> applyStatus(String jobId) {
+        if (jobId == null || jobId.isBlank()) {
+            return Map.of("success", false, "message", "缺少 Lightroom 调色任务 ID。");
         }
-        traceLogger.warn("lightroom.apply.timeout", jobId, Map.of(
-                "resultPath", resultPath.toString(),
-                "timeoutMs", timeout.toMillis()
-        ));
-        return Map.of("success", false, "message", "等待 Lightroom 插件应用参数超时。");
+        Path resultPath = stateService.bridgePaths().fs("apply-results", jobId + ".result");
+        if (!Files.exists(resultPath)) {
+            traceLogger.info("lightroom.apply.status.pending", jobId, Map.of("resultPath", resultPath.toString()));
+            return Map.of(
+                    "success", true,
+                    "pending", true,
+                    "jobId", jobId,
+                    "message", "Lightroom 正在处理调色任务。"
+            );
+        }
+        Map<String, Object> result = parseResult(jobId, resultPath);
+        traceLogger.info("lightroom.apply.status.finished", jobId, result);
+        return result;
     }
 
     private Map<String, Object> parseResult(String jobId, Path resultPath) {
         try {
-            traceLogger.info("lightroom.apply.result.reading", jobId, Map.of("resultPath", resultPath.toString()));
             Map<String, Object> result = new java.util.LinkedHashMap<>();
             for (String line : Files.readAllLines(resultPath)) {
                 int index = line.indexOf('=');
@@ -93,19 +89,19 @@ public class LightroomToolService {
                     result.put(line.substring(0, index), line.substring(index + 1));
                 }
             }
-            Map<String, Object> parsed = Map.of(
+            return Map.of(
                     "success", "true".equals(String.valueOf(result.get("success"))),
+                    "pending", false,
+                    "jobId", jobId,
                     "message", String.valueOf(result.getOrDefault("message", "")),
                     "previewUrl", String.valueOf(result.getOrDefault("previewUrl", ""))
             );
-            traceLogger.info("lightroom.apply.result.parsed", jobId, parsed);
-            return parsed;
         } catch (Exception exception) {
             traceLogger.error("lightroom.apply.result.read_failed", jobId, Map.of(
                     "resultPath", resultPath.toString(),
                     "error", exception.getMessage()
             ));
-            return Map.of("success", false, "message", "读取 Lightroom 应用结果失败：" + exception.getMessage());
+            return Map.of("success", false, "pending", false, "jobId", jobId, "message", "读取 Lightroom 应用结果失败：" + exception.getMessage());
         }
     }
 

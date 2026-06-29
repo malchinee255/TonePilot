@@ -128,7 +128,8 @@ public class ModelRuntimeAgent {
                     json.path("assistantMessage").asText("已根据模型结果生成 Lightroom 调色参数。"),
                     developSettings,
                     buildDeltas(input.currentSettings(), developSettings),
-                    analysis
+                    analysis,
+                    content
             );
         } catch (Exception exception) {
             log.debug("模型响应解析失败，回退本地规则：{}", exception.getMessage());

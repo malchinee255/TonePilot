@@ -73,6 +73,12 @@ public class LocalRuntimeController {
         return orchestrator.chat(payload);
     }
 
+    @GetMapping("/api/lightroom-agent/apply-status/{jobId}")
+    public Map<String, Object> applyStatus(@PathVariable String jobId) {
+        traceLogger.info("api.agent_apply_status.request", jobId, Map.of("jobId", jobId));
+        return orchestrator.applyStatus(jobId);
+    }
+
     @GetMapping("/agent-console")
     public ResponseEntity<String> agentConsole() {
         traceLogger.info("api.agent_console.request", "", Map.of());

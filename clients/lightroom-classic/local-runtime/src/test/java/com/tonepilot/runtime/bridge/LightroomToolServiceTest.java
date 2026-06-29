@@ -1,6 +1,5 @@
 package com.tonepilot.runtime.bridge;
 
-import com.tonepilot.runtime.config.RuntimeProperties;
 import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,14 +20,10 @@ class LightroomToolServiceTest {
 
     @Test
     void writesApplyJobAsExecutableLuaChunk() throws Exception {
-        RuntimeProperties properties = new RuntimeProperties();
-        properties.getBridge().setApplyTimeoutMs(1);
-
         LightroomStateService stateService = mock(LightroomStateService.class);
         when(stateService.bridgePaths()).thenReturn(new BridgePaths(tempDir, tempDir.toString()));
 
         LightroomToolService service = new LightroomToolService();
-        ReflectionTestUtils.setField(service, "properties", properties);
         ReflectionTestUtils.setField(service, "stateService", stateService);
         ReflectionTestUtils.setField(service, "traceLogger", mock(RuntimeTraceLogger.class));
 

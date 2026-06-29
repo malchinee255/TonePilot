@@ -8,7 +8,9 @@ import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -35,9 +37,12 @@ public class RuntimeAgentOrchestrator {
     @Autowired
     private RuntimeTraceLogger traceLogger;
 
+    @Autowired
+    private AgentConversationMemory memory;
+
     @SuppressWarnings("unchecked")
     public Map<String, Object> chat(Map<String, Object> payload) {
-        String sessionId = String.valueOf(payload.getOrDefault("sessionId", "local-session-" + System.currentTimeMillis()));
+        String sessionId = sessionId(payload);
         String message = String.valueOf(payload.getOrDefault("message", "")).trim();
         String requestedProvider = String.valueOf(payload.getOrDefault("provider", ""));
         traceLogger.info("agent.request.received", sessionId, Map.of(
@@ -58,17 +63,16 @@ public class RuntimeAgentOrchestrator {
                     "message", "Lightroom 插件不可用：" + status.getOrDefault("message", "请确认 Lightroom 插件正在运行并写入心跳。")
             );
         }
-        traceLogger.info("agent.lightroom.available", sessionId, status);
 
         Map<String, Object> selected = stateService.selectedPhoto();
         if (!Boolean.TRUE.equals(selected.get("available"))) {
             traceLogger.warn("agent.photo.unavailable", sessionId, selected);
             return Map.of("success", false, "message", selected.getOrDefault("message", "Lightroom 当前没有选中照片。"));
         }
-        traceLogger.info("agent.photo.loaded", sessionId, Map.of(
-                "photo", selected.getOrDefault("photo", Map.of()),
-                "hasPreview", selected.containsKey("previewUrl")
-        ));
+
+        if (isConfirmToApply(message)) {
+            return applyPendingDecision(sessionId, selected);
+        }
 
         Map<String, Object> currentAdjustment = selected.get("currentAdjustment") instanceof Map<?, ?> map
                 ? (Map<String, Object>) map
@@ -84,15 +88,68 @@ public class RuntimeAgentOrchestrator {
                 runtimeConfig,
                 () -> ruleAgent.plan(agentInput)
         );
-        traceLogger.info("agent.plan.finished", sessionId, Map.of(
+        traceLogger.info("agent.decision.finished", sessionId, Map.of(
                 "deltaCount", tuneResult.deltas().size(),
                 "settingCount", tuneResult.developSettings().size(),
                 "analysis", tuneResult.analysis()
         ));
 
-        Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
-        traceLogger.info("agent.lightroom.apply.finished", sessionId, applyResult);
+        String beforePreviewUrl = String.valueOf(selected.getOrDefault("baselinePreviewUrl", selected.getOrDefault("previewUrl", "")));
+        memory.rememberDecision(sessionId, new AgentConversationMemory.PendingDecision(
+                sessionId,
+                message,
+                tuneResult,
+                selected.get("photo") instanceof Map<?, ?> photo ? (Map<String, Object>) photo : Map.of(),
+                beforePreviewUrl,
+                Instant.now()
+        ));
 
+        Map<String, Object> data = baseData(sessionId, selected, tuneResult);
+        data.put("action", "await_user_decision");
+        data.put("beforePreviewUrl", beforePreviewUrl);
+        data.put("knowledgeMatches", knowledgeMatches(runtimeConfig));
+        data.put("suggestedReplies", List.of("确认，按这个修", "方向可以，但再自然一点", "先不要修，换一种风格"));
+        data.put("assistantMessage", tuneResult.assistantMessage()
+                + "\n\n如果这个方向合适，直接回复“确认按这个修”；如果不合适，继续告诉我你想调整的方向。");
+
+        adminRuntimeClient.recordEvent("agent.decision.proposed", sessionId, data);
+        traceLogger.info("agent.response.ready", sessionId, Map.of("action", "await_user_decision"));
+        return Map.of("success", true, "message", data.get("assistantMessage"), "data", data);
+    }
+
+    public Map<String, Object> applyStatus(String jobId) {
+        return toolService.applyStatus(jobId);
+    }
+
+    private Map<String, Object> applyPendingDecision(String sessionId, Map<String, Object> selected) {
+        var pending = memory.pendingDecision(sessionId);
+        if (pending.isEmpty()) {
+            traceLogger.warn("agent.apply.no_pending_decision", sessionId, Map.of());
+            return Map.of(
+                    "success", true,
+                    "message", "我还没有可以执行的调色方案。请先描述你想要的效果，我会先分析方向。",
+                    "data", Map.of("sessionId", sessionId, "action", "need_user_intent")
+            );
+        }
+
+        AgentConversationMemory.PendingDecision decision = pending.get();
+        AgentTuneResult tuneResult = decision.tuneResult();
+        Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
+        memory.clearPendingDecision(sessionId);
+
+        Map<String, Object> data = baseData(sessionId, selected, tuneResult);
+        data.put("action", "tool_submitted");
+        data.put("apply", applyResult);
+        data.put("beforePreviewUrl", decision.beforePreviewUrl());
+        data.put("afterPreviewUrl", "");
+        data.put("assistantMessage", "我已经把确认后的方案提交给 Lightroom，处理完成后会更新修图后预览。");
+
+        adminRuntimeClient.recordEvent("agent.tool.submitted", sessionId, data);
+        traceLogger.info("agent.tool.submitted", sessionId, Map.of("apply", applyResult));
+        return Map.of("success", applyResult.getOrDefault("success", true), "message", data.get("assistantMessage"), "data", data);
+    }
+
+    private Map<String, Object> baseData(String sessionId, Map<String, Object> selected, AgentTuneResult tuneResult) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("sessionId", sessionId);
         data.put("photo", selected.getOrDefault("photo", Map.of()));
@@ -100,19 +157,40 @@ public class RuntimeAgentOrchestrator {
         data.put("assistantMessage", tuneResult.assistantMessage());
         data.put("deltas", tuneResult.deltas());
         data.put("developSettings", tuneResult.developSettings());
-        data.put("apply", applyResult);
-        data.put("beforePreviewUrl", selected.getOrDefault("baselinePreviewUrl", selected.get("previewUrl")));
-        data.put("afterPreviewUrl", applyResult.getOrDefault("previewUrl", ""));
+        data.put("modelRawContent", tuneResult.rawModelContent());
+        return data;
+    }
 
-        adminRuntimeClient.recordEvent("agent.message.finished", sessionId, data);
-        traceLogger.info("agent.response.ready", sessionId, Map.of(
-                "success", applyResult.getOrDefault("success", true),
-                "message", applyResult.getOrDefault("message", tuneResult.assistantMessage())
+    private List<Map<String, Object>> knowledgeMatches(Map<String, Object> runtimeConfig) {
+        Object knowledge = runtimeConfig.get("knowledge");
+        boolean enabled = knowledge instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get("enabled"));
+        if (!enabled) {
+            return List.of(Map.of(
+                    "title", "本地知识库未启用",
+                    "summary", "当前仅基于照片状态、上下文和模型判断生成调色方向。"
+            ));
+        }
+        return List.of(Map.of(
+                "title", "知识库检索占位",
+                "summary", "已启用知识库配置，后续可接入管理端素材检索结果。"
         ));
-        return Map.of(
-                "success", applyResult.getOrDefault("success", true),
-                "message", applyResult.getOrDefault("message", tuneResult.assistantMessage()),
-                "data", data
-        );
+    }
+
+    private boolean isConfirmToApply(String message) {
+        String value = message == null ? "" : message.trim().toLowerCase();
+        return value.contains("确认")
+                || value.contains("按这个修")
+                || value.contains("开始修")
+                || value.contains("执行")
+                || value.contains("apply")
+                || value.contains("go ahead");
+    }
+
+    private String sessionId(Map<String, Object> payload) {
+        Object value = payload.get("sessionId");
+        if (value == null || String.valueOf(value).isBlank() || "null".equals(String.valueOf(value))) {
+            return "local-session-" + System.currentTimeMillis();
+        }
+        return String.valueOf(value);
     }
 }
