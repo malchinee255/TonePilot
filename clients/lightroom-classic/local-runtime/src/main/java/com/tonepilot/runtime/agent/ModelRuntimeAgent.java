@@ -3,6 +3,7 @@ package com.tonepilot.runtime.agent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -29,6 +29,9 @@ public class ModelRuntimeAgent {
     @Autowired
     private RuleBasedRuntimeAgent ruleAgent = new RuleBasedRuntimeAgent();
 
+    @Autowired
+    private RuntimeTraceLogger traceLogger;
+
     private HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     public ModelRuntimeAgent() {
@@ -41,13 +44,20 @@ public class ModelRuntimeAgent {
             Supplier<AgentTuneResult> fallback
     ) {
         if (provider == null || provider.equals("rule")) {
+            traceLogger.info("model.provider.rule", "", Map.of("reason", "provider_rule"));
             return fallback.get();
         }
         ProviderConfig config = providerConfig(provider, runtimeConfig);
         if (!config.ready()) {
+            traceLogger.warn("model.provider.not_ready", "", Map.of("provider", provider));
             return fallback.get();
         }
         try {
+            traceLogger.info("model.request.sending", "", Map.of(
+                    "provider", provider,
+                    "baseUrl", config.baseUrl(),
+                    "model", config.model()
+            ));
             String body = objectMapper.writeValueAsString(Map.of(
                     "model", config.model(),
                     "temperature", 0.2,
@@ -64,18 +74,29 @@ public class ModelRuntimeAgent {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            traceLogger.info("model.response.received", "", Map.of(
+                    "provider", provider,
+                    "statusCode", response.statusCode()
+            ));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.debug("{} 模型调用失败，状态码：{}", provider, response.statusCode());
+                traceLogger.warn("model.response.non_success", "", Map.of(
+                        "provider", provider,
+                        "statusCode", response.statusCode()
+                ));
                 return fallback.get();
             }
             return parseModelResult(input, response.body(), fallback);
         } catch (Exception exception) {
             log.debug("{} 模型调用失败，回退本地规则：{}", provider, exception.getMessage());
+            traceLogger.warn("model.request.failed", "", Map.of(
+                    "provider", provider,
+                    "error", exception.getMessage()
+            ));
             return fallback.get();
         }
     }
 
-    @SuppressWarnings("unchecked")
     private AgentTuneResult parseModelResult(
             AgentInput input,
             String responseBody,
@@ -91,6 +112,7 @@ public class ModelRuntimeAgent {
                     }
             );
             if (developSettings == null || developSettings.isEmpty()) {
+                traceLogger.warn("model.parse.empty_settings", "", Map.of());
                 return fallback.get();
             }
             AgentTuneResult ruleShape = ruleAgent.plan(new AgentInput(input.message(), input.currentSettings()));
@@ -98,6 +120,10 @@ public class ModelRuntimeAgent {
                     ? objectMapper.convertValue(json.path("analysis"), new TypeReference<>() {
                     })
                     : ruleShape.analysis();
+            traceLogger.info("model.parse.succeeded", "", Map.of(
+                    "settingCount", developSettings.size(),
+                    "hasAnalysis", json.has("analysis")
+            ));
             return new AgentTuneResult(
                     json.path("assistantMessage").asText("已根据模型结果生成 Lightroom 调色参数。"),
                     developSettings,
@@ -106,6 +132,7 @@ public class ModelRuntimeAgent {
             );
         } catch (Exception exception) {
             log.debug("模型响应解析失败，回退本地规则：{}", exception.getMessage());
+            traceLogger.warn("model.parse.failed", "", Map.of("error", exception.getMessage()));
             return fallback.get();
         }
     }
@@ -129,6 +156,7 @@ public class ModelRuntimeAgent {
                 你是 TonePilot 的 Lightroom 调色 Agent。
                 只允许输出严格 JSON，不要输出 Markdown。
                 只输出本轮需要修改的 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
+                如果用户只要求分析而不要求修图，则 developSettings 输出空对象。
                 JSON 结构：
                 {
                   "assistantMessage": "中文解释",

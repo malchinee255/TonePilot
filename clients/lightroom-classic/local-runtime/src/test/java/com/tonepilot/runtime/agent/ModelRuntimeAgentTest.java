@@ -1,10 +1,13 @@
 package com.tonepilot.runtime.agent;
 
+import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class ModelRuntimeAgentTest {
 
@@ -12,6 +15,7 @@ class ModelRuntimeAgentTest {
     void fallsBackToRuleAgentWhenProviderConfigIsMissing() {
         RuleBasedRuntimeAgent ruleAgent = new RuleBasedRuntimeAgent();
         ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+        ReflectionTestUtils.setField(modelAgent, "traceLogger", mock(RuntimeTraceLogger.class));
 
         AgentTuneResult result = modelAgent.plan(
                 new AgentInput("夜景电影感，再亮一点", Map.of("Temperature", 4200)),

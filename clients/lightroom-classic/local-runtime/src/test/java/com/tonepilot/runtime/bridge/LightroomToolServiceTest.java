@@ -1,6 +1,7 @@
 package com.tonepilot.runtime.bridge;
 
 import com.tonepilot.runtime.config.RuntimeProperties;
+import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -29,6 +30,7 @@ class LightroomToolServiceTest {
         LightroomToolService service = new LightroomToolService();
         ReflectionTestUtils.setField(service, "properties", properties);
         ReflectionTestUtils.setField(service, "stateService", stateService);
+        ReflectionTestUtils.setField(service, "traceLogger", mock(RuntimeTraceLogger.class));
 
         service.applyDevelopSettings(Map.of("Exposure2012", 0.2));
 
