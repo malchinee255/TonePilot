@@ -2,12 +2,12 @@
 
 ## 产品边界
 
-TonePilot 只保留两个端：
+TonePilot 保留两个产品端：
 
 - 管理端：Web 管理台，维护风格、样片、知识库、审核、观测和评测。
 - 插件端：Lightroom Classic 用户端，摄影师直接在 Lightroom 中对话修图。
 
-后端不再做浏览器用户修图工作台，不再维护旧 `/api/tuning` 会话，不再做 Java2D 图片预览渲染，也不再导出 XMP 作为主要交付方式。真实效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
+后端不再做浏览器用户修图工作台，不维护旧 `/api/tuning` 会话，不做 Java2D 图片预览渲染，也不把 XMP 导出作为主要交付方式。真实效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
 
 ## 插件端链路
 
@@ -19,12 +19,12 @@ flowchart LR
   D --> E["POST /api/lightroom-agent/tune"]
   E --> F["后端 Agent 生成参数"]
   F --> G["参数 diff 和 Develop Settings"]
-  G --> H["Bridge 写入任务结果"]
+  G --> H["Bridge 写入任务文件"]
   H --> I["Lua 插件 applyDevelopSettings"]
   I --> J["Lightroom 显示真实调色结果"]
 ```
 
-Lightroom 自身负责实时预览、前后对比、撤销、保存和复制设置。TonePilot 只生成参数决策。
+Lightroom 自身负责实时预览、撤销、保存和复制设置。TonePilot 只生成参数决策。
 
 ## 后端 Agent 工作流
 
@@ -48,7 +48,15 @@ flowchart TD
 - `ColorPlanningAgent`：生成 Lightroom 参数。
 - `ParamValidationAgent`：校验参数范围并收敛过激调整。
 
-插件端多轮微调使用 `lightroomagent` 包中的 `TuningAdjustmentPlanner` 在当前 Develop 参数上继续生成增量。每轮返回：
+插件端多轮微调使用 `com.tonepilot.lightroom.application.TuningAdjustmentPlanner`，在当前 Develop 参数上继续生成增量。相关代码按 DDD 风格拆分为：
+
+- `colorgrading.domain`：调色参数和值对象，例如 `ColorAdjustment`、`LightroomBasicParams`。
+- `lightroom.domain`：Lightroom 调色会话中的领域对象，例如 `ParameterDelta`、`TuningPlan`。
+- `lightroom.application`：插件端调色应用服务和意图规划。
+- `lightroom.infrastructure`：Lightroom Develop Settings 映射。
+- `lightroom.interfaces`：插件端 REST API 请求、响应和 Controller。
+
+每轮返回：
 
 - `assistantMessage`：给用户看的 Agent 回复。
 - `adjustment`：后端语义化参数。
@@ -63,7 +71,7 @@ flowchart TD
 - Agent 输入视图：每个 Agent 只读取自己需要的字段，避免把全量上下文塞进 prompt。
 - 长期知识上下文：知识留在库里，运行时只检索 topK 片段。
 
-`WorkflowRunRepository` 会优先写 Redis，同时写数据库快照，并保留本地缓存兜底。Redis 不可用时，开发流程不会中断。
+`WorkflowRunRepository` 优先写 Redis，同时写数据库快照，并保留本地缓存兜底。Redis 不可用时，开发流程不会中断。
 
 ## 管理端链路
 
@@ -83,7 +91,17 @@ flowchart LR
 - 样片管理：上传管理员样片，分析样片并生成知识草稿。
 - 观测评估：查看 LLM 调用、审计事件，运行 benchmark。
 
-## 本地 Bridge
+## Lightroom Classic 客户端
+
+Lightroom Classic 用户端放在 `clients/lightroom-classic`，结构上接近 Neurapix 这类 Lightroom AI 插件：插件负责入口和本机执行，Bridge 负责本地通信，后端负责 AI/Agent。
+
+```text
+clients/lightroom-classic/
+├── bridge/     本地 Bridge 服务、Agent 控制台、安装脚本和测试
+│   ├── server.js
+│   └── src/bridge-runtime.js
+└── plugin/     Lightroom Classic Lua 插件源码
+```
 
 Lightroom Classic 插件运行在 Windows Lightroom 进程内，本地 Bridge 可以运行在 WSL 或 Windows。
 
@@ -95,7 +113,7 @@ flowchart LR
   D --> C
   C --> E["后端 /api/lightroom-agent/tune"]
   E --> C
-  C --> F["agent-results"]
+  C --> F["apply-jobs"]
   F --> A
 ```
 
@@ -114,7 +132,7 @@ Bridge 暴露本地接口：
 
 - H2 文件数据库：保存快照、日志和审计事件。
 - 本地文件存储：保存管理端样片等文件。
-- 本地规则模型：无密钥也可跑通。
+- 本地规则模式：无密钥也可跑通。
 
 生产形态可替换：
 

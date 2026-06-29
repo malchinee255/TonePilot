@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.NotFoundException;
 import com.tonepilot.domain.ColorStyle;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -15,6 +17,7 @@ public class StyleService {
 
     private final InMemoryTonePilotStore store;
 
+    @Autowired
     public StyleService(InMemoryTonePilotStore store) {
         this.store = store;
     }
@@ -74,3 +77,5 @@ public class StyleService {
         }
     }
 }
+
+

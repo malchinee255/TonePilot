@@ -1,5 +1,7 @@
 package com.tonepilot.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.observability.ObservabilityService;
@@ -28,6 +30,7 @@ public class ApiGuardFilter extends OncePerRequestFilter {
     private final ObservabilityService observabilityService;
     private final Map<String, RateWindow> windows = new ConcurrentHashMap<>();
 
+    @Autowired
     public ApiGuardFilter(
             SecurityProperties securityProperties,
             RateLimitProperties rateLimitProperties,
@@ -131,3 +134,5 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         }
     }
 }
+
+

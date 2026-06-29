@@ -1,5 +1,7 @@
 package com.tonepilot.ai;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tonepilot.observability.ObservabilityService;
 import dev.langchain4j.data.message.ImageContent;
@@ -19,6 +21,7 @@ public class OpenAiCompatibleModelClient {
     private final LangChainChatModelFactory chatModelFactory;
     private final ObservabilityService observabilityService;
 
+    @Autowired
     public OpenAiCompatibleModelClient(
             AiProperties properties,
             ObjectMapper objectMapper,
@@ -108,3 +111,5 @@ public class OpenAiCompatibleModelClient {
         }
     }
 }
+
+

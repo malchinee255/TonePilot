@@ -1,6 +1,9 @@
 package com.tonepilot.harness;
 
-import com.tonepilot.domain.*;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.LightroomBasicParams;
+import com.tonepilot.colorgrading.domain.LightroomEffectsParams;
+import com.tonepilot.colorgrading.domain.LightroomHslParams;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

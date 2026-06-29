@@ -1,5 +1,7 @@
 package com.tonepilot.workflow.node;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.ParamValidationAgent;
 import com.tonepilot.agent.ParamValidationResult;
 import com.tonepilot.workflow.AgentNode;
@@ -11,6 +13,7 @@ public class ParamValidationAgentNode implements AgentNode {
 
     private final ParamValidationAgent paramValidationAgent;
 
+    @Autowired
     public ParamValidationAgentNode(ParamValidationAgent paramValidationAgent) {
         this.paramValidationAgent = paramValidationAgent;
     }
@@ -48,3 +51,5 @@ public class ParamValidationAgentNode implements AgentNode {
         context.getMetadata().put("validationCorrected", result.corrected());
     }
 }
+
+

@@ -1,5 +1,7 @@
 package com.tonepilot.web.admin;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.domain.ColorStyle;
 import com.tonepilot.service.StyleService;
@@ -16,6 +18,7 @@ public class AdminStyleController {
 
     private final StyleService styleService;
 
+    @Autowired
     public AdminStyleController(StyleService styleService) {
         this.styleService = styleService;
     }
@@ -46,3 +49,5 @@ public class AdminStyleController {
         return ApiResponse.ok();
     }
 }
+
+

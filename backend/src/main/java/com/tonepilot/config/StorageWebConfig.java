@@ -1,5 +1,7 @@
 package com.tonepilot.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +16,7 @@ public class StorageWebConfig implements WebMvcConfigurer {
 
     private final String storageRoot;
 
+    @Autowired
     public StorageWebConfig(@Value("${tonepilot.storage.root}") String storageRoot) {
         this.storageRoot = storageRoot;
     }
@@ -24,3 +27,5 @@ public class StorageWebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/files/**").addResourceLocations(location + "/");
     }
 }
+
+

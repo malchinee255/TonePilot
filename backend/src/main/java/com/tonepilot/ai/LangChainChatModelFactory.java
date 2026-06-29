@@ -1,5 +1,7 @@
 package com.tonepilot.ai;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.springframework.stereotype.Component;
@@ -9,6 +11,7 @@ public class LangChainChatModelFactory {
 
     private final AiProperties properties;
 
+    @Autowired
     public LangChainChatModelFactory(AiProperties properties) {
         this.properties = properties;
     }
@@ -62,3 +65,5 @@ public class LangChainChatModelFactory {
         return value == null || value.isBlank();
     }
 }
+
+

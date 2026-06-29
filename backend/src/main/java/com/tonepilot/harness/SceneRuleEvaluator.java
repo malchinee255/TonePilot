@@ -1,6 +1,6 @@
 package com.tonepilot.harness;
 
-import com.tonepilot.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.domain.PhotoAnalysis;
 
 import java.util.ArrayList;

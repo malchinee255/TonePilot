@@ -1,0 +1,59 @@
+# 本地开发配置示例。
+# 使用方式：复制为 application-local.yml，然后用 `--spring.profiles.active=local` 启动。
+
+server:
+  port: 8080
+
+spring:
+  datasource:
+    # 默认 H2；如果要切 MySQL，可以改成 jdbc:mysql://localhost:3306/tonepilot
+    url: jdbc:h2:file:./data/tonepilot;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+
+tonepilot:
+  persistence:
+    enabled: true
+  security:
+    api-key-enabled: false
+    api-key:
+  rate-limit:
+    enabled: true
+    requests-per-minute: 120
+  workflow:
+    redis-enabled: true
+    redis-key-prefix: tonepilot:workflow:
+    ttl: 24h
+  storage:
+    # local 或 minio
+    type: local
+    root: ./storage
+    minio:
+      endpoint: http://localhost:9000
+      access-key: tonepilot
+      secret-key: tonepilot123
+      bucket: tonepilot
+  rag:
+    default-top-k: 5
+  ai:
+    # rule / openai / qwen2
+    provider: rule
+    fallback-enabled: true
+    temperature: 0.2
+    response-format-enabled: false
+    openai:
+      base-url: https://api.openai.com/v1
+      api-key:
+      chat-model:
+      vision-model:
+    qwen2:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key:
+      chat-model: qwen-plus
+      vision-model: qwen-vl-plus

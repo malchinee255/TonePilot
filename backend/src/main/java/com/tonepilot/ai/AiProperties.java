@@ -1,7 +1,11 @@
 package com.tonepilot.ai;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+@Getter
+@Setter
 @ConfigurationProperties(prefix = "tonepilot.ai")
 public class AiProperties {
 
@@ -11,54 +15,6 @@ public class AiProperties {
     private boolean responseFormatEnabled = false;
     private ProviderConfig openai = new ProviderConfig();
     private ProviderConfig qwen2 = new ProviderConfig();
-
-    public String getProvider() {
-        return provider;
-    }
-
-    public void setProvider(String provider) {
-        this.provider = provider;
-    }
-
-    public boolean isFallbackEnabled() {
-        return fallbackEnabled;
-    }
-
-    public void setFallbackEnabled(boolean fallbackEnabled) {
-        this.fallbackEnabled = fallbackEnabled;
-    }
-
-    public double getTemperature() {
-        return temperature;
-    }
-
-    public void setTemperature(double temperature) {
-        this.temperature = temperature;
-    }
-
-    public boolean isResponseFormatEnabled() {
-        return responseFormatEnabled;
-    }
-
-    public void setResponseFormatEnabled(boolean responseFormatEnabled) {
-        this.responseFormatEnabled = responseFormatEnabled;
-    }
-
-    public ProviderConfig getOpenai() {
-        return openai;
-    }
-
-    public void setOpenai(ProviderConfig openai) {
-        this.openai = openai;
-    }
-
-    public ProviderConfig getQwen2() {
-        return qwen2;
-    }
-
-    public void setQwen2(ProviderConfig qwen2) {
-        this.qwen2 = qwen2;
-    }
 
     public String activeProvider() {
         String override = AiProviderContext.current();
@@ -89,42 +45,12 @@ public class AiProperties {
         return normalized;
     }
 
+    @Getter
+    @Setter
     public static class ProviderConfig {
         private String baseUrl;
         private String apiKey;
         private String chatModel;
         private String visionModel;
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
-        }
-
-        public String getApiKey() {
-            return apiKey;
-        }
-
-        public void setApiKey(String apiKey) {
-            this.apiKey = apiKey;
-        }
-
-        public String getChatModel() {
-            return chatModel;
-        }
-
-        public void setChatModel(String chatModel) {
-            this.chatModel = chatModel;
-        }
-
-        public String getVisionModel() {
-            return visionModel;
-        }
-
-        public void setVisionModel(String visionModel) {
-            this.visionModel = visionModel;
-        }
     }
 }

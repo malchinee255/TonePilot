@@ -1,5 +1,7 @@
 package com.tonepilot.observability;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.persistence.PersistenceProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +27,7 @@ public class ObservabilityRepository {
     private final Deque<LlmCallLog> localLlmLogs = new ArrayDeque<>();
     private final Deque<AuditEvent> localAuditEvents = new ArrayDeque<>();
 
+    @Autowired
     public ObservabilityRepository(
             PersistenceProperties persistenceProperties,
             ObservabilityProperties observabilityProperties,
@@ -175,3 +178,5 @@ public class ObservabilityRepository {
         }
     }
 }
+
+

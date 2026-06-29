@@ -1,5 +1,7 @@
 package com.tonepilot.agent;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.ai.AiProperties;
 import com.tonepilot.ai.OpenAiCompatibleModelClient;
 import com.tonepilot.domain.ColorStyle;
@@ -18,6 +20,7 @@ public class ModelBackedStyleAnalysisAgent implements StyleAnalysisAgent {
     private final ObjectStorageService storageService;
     private final RuleBasedStyleAnalysisAgent fallback;
 
+    @Autowired
     public ModelBackedStyleAnalysisAgent(
             AiProperties properties,
             OpenAiCompatibleModelClient modelClient,
@@ -61,3 +64,5 @@ public class ModelBackedStyleAnalysisAgent implements StyleAnalysisAgent {
         }
     }
 }
+
+

@@ -1,5 +1,7 @@
 package com.tonepilot.agent;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.ai.AiProperties;
 import com.tonepilot.ai.OpenAiCompatibleModelClient;
 import com.tonepilot.ai.dto.StyleKnowledgeModelOutput;
@@ -23,6 +25,7 @@ public class ModelBackedKnowledgeGenerationAgent implements KnowledgeGenerationA
     private final OpenAiCompatibleModelClient modelClient;
     private final RuleBasedKnowledgeGenerationAgent fallback;
 
+    @Autowired
     public ModelBackedKnowledgeGenerationAgent(
             AiProperties properties,
             OpenAiCompatibleModelClient modelClient,
@@ -80,3 +83,5 @@ public class ModelBackedKnowledgeGenerationAgent implements KnowledgeGenerationA
         return value == null || value.isBlank() ? defaultValue : value;
     }
 }
+
+

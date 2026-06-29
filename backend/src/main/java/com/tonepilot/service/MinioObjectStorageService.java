@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.storage.StorageProperties;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
@@ -26,6 +28,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
     private final String bucket;
     private volatile boolean bucketReady = false;
 
+    @Autowired
     public MinioObjectStorageService(StorageProperties properties) {
         StorageProperties.Minio minio = properties.getMinio();
         this.bucket = minio.getBucket();
@@ -183,3 +186,5 @@ public class MinioObjectStorageService implements ObjectStorageService {
         };
     }
 }
+
+

@@ -1,5 +1,7 @@
 package com.tonepilot.workflow;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tonepilot.persistence.PersistenceProperties;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -28,6 +30,7 @@ public class WorkflowRunRepository {
     private final ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
     private final Map<String, WorkflowRunSnapshot> localSnapshots = new ConcurrentHashMap<>();
 
+    @Autowired
     public WorkflowRunRepository(
             InMemoryTonePilotStore store,
             ObjectMapper objectMapper,
@@ -198,3 +201,5 @@ public class WorkflowRunRepository {
         }
     }
 }
+
+

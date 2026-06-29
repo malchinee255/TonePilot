@@ -1,7 +1,9 @@
 package com.tonepilot.workflow.node;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.ColorPlanningAgent;
-import com.tonepilot.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.workflow.AgentNode;
 import com.tonepilot.workflow.TonePilotAgentContext;
 import org.springframework.stereotype.Component;
@@ -11,6 +13,7 @@ public class ColorPlanningAgentNode implements AgentNode {
 
     private final ColorPlanningAgent colorPlanningAgent;
 
+    @Autowired
     public ColorPlanningAgentNode(ColorPlanningAgent colorPlanningAgent) {
         this.colorPlanningAgent = colorPlanningAgent;
     }
@@ -46,3 +49,5 @@ public class ColorPlanningAgentNode implements AgentNode {
         context.setDraftAdjustment(draft);
     }
 }
+
+

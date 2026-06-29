@@ -1,5 +1,7 @@
 package com.tonepilot.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.service.ObjectStorageService;
 import com.tonepilot.service.StoredObject;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,6 +26,7 @@ public class StoredFileController {
 
     private final ObjectStorageService storageService;
 
+    @Autowired
     public StoredFileController(ObjectStorageService storageService) {
         this.storageService = storageService;
     }
@@ -42,3 +45,5 @@ public class StoredFileController {
                 .body(object.bytes());
     }
 }
+
+

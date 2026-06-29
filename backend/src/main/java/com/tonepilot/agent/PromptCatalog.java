@@ -3,7 +3,7 @@ package com.tonepilot.agent;
 public final class PromptCatalog {
 
     public static final String PHOTO_ANALYSIS_PROMPT = """
-            你是一个专业摄影后期分析助手。请分析用户上传的照片。
+            你是一个专业摄影后期分析助手。请分析用户上传或 Lightroom 当前选中的照片。
             请只输出 JSON，不要输出多余解释。
             输出字段：scene, subject, exposureIssues, whiteBalanceIssues, colorIssues, recommendedStyles, summary。
             """;
@@ -11,7 +11,12 @@ public final class PromptCatalog {
     public static final String COLOR_PLANNING_PROMPT = """
             你是一个专业摄影后期调色师，擅长 Lightroom 参数化调色。
             你不能生成图片，只能生成 Lightroom 风格调色参数。
-            输出必须是严格 JSON，并包含 style, reason, basic, hsl, effects, steps。
+            输出必须是严格 JSON，并包含 style, reason, basic, hsl, effects, extended, steps。
+            basic 包含曝光、对比度、高光、阴影、白色色阶、黑色色阶、色温、色调、纹理、清晰度、去朦胧、自然饱和度、饱和度。
+            hsl 包含红、橙、黄、绿、浅绿、蓝、紫、洋红的色相、饱和度、明亮度。
+            effects 包含 grain 和 vignette。
+            extended 只在确实需要时填写 Lightroom 其它 Develop Settings，例如曲线、细节、降噪、颜色分级、镜头校正、变换、暗角细项、颗粒细项和相机校准。
+            不要修改用户没有要求、也不是当前风格必需的参数，尤其不要随意改白平衡、裁剪、透视和镜头校正。
             """;
 
     public static final String STYLE_ANALYSIS_PROMPT = """

@@ -1,5 +1,7 @@
 package com.tonepilot.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.evaluation.BenchmarkEvaluationService;
 import com.tonepilot.evaluation.BenchmarkReport;
@@ -13,6 +15,7 @@ public class EvaluationController {
 
     private final BenchmarkEvaluationService benchmarkEvaluationService;
 
+    @Autowired
     public EvaluationController(BenchmarkEvaluationService benchmarkEvaluationService) {
         this.benchmarkEvaluationService = benchmarkEvaluationService;
     }
@@ -22,3 +25,5 @@ public class EvaluationController {
         return ApiResponse.ok(benchmarkEvaluationService.run(request));
     }
 }
+
+

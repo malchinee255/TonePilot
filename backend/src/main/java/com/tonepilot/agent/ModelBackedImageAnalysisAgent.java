@@ -1,5 +1,7 @@
 package com.tonepilot.agent;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.ai.AiProperties;
 import com.tonepilot.ai.OpenAiCompatibleModelClient;
 import com.tonepilot.ai.dto.PhotoAnalysisModelOutput;
@@ -22,6 +24,7 @@ public class ModelBackedImageAnalysisAgent implements ImageAnalysisAgent {
     private final ObjectStorageService storageService;
     private final RuleBasedImageAnalysisAgent fallback;
 
+    @Autowired
     public ModelBackedImageAnalysisAgent(
             AiProperties properties,
             OpenAiCompatibleModelClient modelClient,
@@ -90,3 +93,5 @@ public class ModelBackedImageAnalysisAgent implements ImageAnalysisAgent {
         return value == null || value.isBlank() ? defaultValue : value;
     }
 }
+
+

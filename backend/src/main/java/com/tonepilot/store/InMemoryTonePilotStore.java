@@ -1,5 +1,6 @@
 package com.tonepilot.store;
 
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.domain.*;
 import com.tonepilot.workflow.TonePilotAgentContext;
 import org.springframework.stereotype.Component;

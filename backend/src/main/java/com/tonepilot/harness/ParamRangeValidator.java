@@ -1,6 +1,6 @@
 package com.tonepilot.harness;
 
-import com.tonepilot.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -21,7 +21,7 @@ public class ParamRangeValidator {
         checkRange(adjustment.basic().shadows(), -100, 100, "shadows", issues);
         checkRange(adjustment.basic().whites(), -100, 100, "whites", issues);
         checkRange(adjustment.basic().blacks(), -100, 100, "blacks", issues);
-        checkRange(adjustment.basic().temperature(), -50, 50, "temperature", issues);
+        check(isTemperatureInRange(adjustment.basic().temperature()), issues, "temperature 在范围内", "temperature 超出范围");
         checkRange(adjustment.basic().tint(), -50, 50, "tint", issues);
         checkRange(adjustment.basic().texture(), -100, 100, "texture", issues);
         checkRange(adjustment.basic().clarity(), -100, 100, "clarity", issues);
@@ -63,6 +63,13 @@ public class ParamRangeValidator {
 
     private void checkRange(int value, int min, int max, String field, List<String> issues) {
         check(value >= min && value <= max, issues, field + " 在范围内", field + " 超出范围");
+    }
+
+    private boolean isTemperatureInRange(int value) {
+        if (Math.abs(value) >= 1000) {
+            return value >= 2000 && value <= 50000;
+        }
+        return value >= -50 && value <= 50;
     }
 
     private void check(boolean passed, List<String> issues, String ok, String fail) {

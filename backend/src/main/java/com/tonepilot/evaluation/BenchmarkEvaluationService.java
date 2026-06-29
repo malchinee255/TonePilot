@@ -1,8 +1,10 @@
 package com.tonepilot.evaluation;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.ColorPlanningAgent;
 import com.tonepilot.ai.AiProviderContext;
-import com.tonepilot.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.domain.PhotoAnalysis;
 import com.tonepilot.harness.ParamRangeValidator;
 import com.tonepilot.observability.ObservabilityService;
@@ -21,6 +23,7 @@ public class BenchmarkEvaluationService {
     private final ParamRangeValidator paramRangeValidator;
     private final ObservabilityService observabilityService;
 
+    @Autowired
     public BenchmarkEvaluationService(
             ColorPlanningAgent colorPlanningAgent,
             ParamRangeValidator paramRangeValidator,
@@ -166,3 +169,5 @@ public class BenchmarkEvaluationService {
         return issue.contains("超出") || issue.contains("缺少") || issue.contains("异常");
     }
 }
+
+

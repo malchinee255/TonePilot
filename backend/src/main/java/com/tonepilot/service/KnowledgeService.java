@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.NotFoundException;
 import com.tonepilot.domain.ColorKnowledge;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -16,6 +18,7 @@ public class KnowledgeService {
 
     private final InMemoryTonePilotStore store;
 
+    @Autowired
     public KnowledgeService(InMemoryTonePilotStore store) {
         this.store = store;
     }
@@ -78,3 +81,5 @@ public class KnowledgeService {
         return value == null || value.isBlank();
     }
 }
+
+

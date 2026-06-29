@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.storage.StorageProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ public class LocalFileStorageService implements ObjectStorageService {
 
     private final Path storageRoot;
 
+    @Autowired
     public LocalFileStorageService(StorageProperties properties) {
         this.storageRoot = Path.of(properties.getRoot()).toAbsolutePath().normalize();
     }
@@ -147,3 +150,5 @@ public class LocalFileStorageService implements ObjectStorageService {
         };
     }
 }
+
+

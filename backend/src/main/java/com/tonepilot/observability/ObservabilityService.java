@@ -1,5 +1,7 @@
 package com.tonepilot.observability;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.ai.AiProperties;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +16,7 @@ public class ObservabilityService {
     private final ObservabilityRepository repository;
     private final AiProperties aiProperties;
 
+    @Autowired
     public ObservabilityService(ObservabilityRepository repository, AiProperties aiProperties) {
         this.repository = repository;
         this.aiProperties = aiProperties;
@@ -94,3 +97,5 @@ public class ObservabilityService {
         return Math.min(limit, 200);
     }
 }
+
+

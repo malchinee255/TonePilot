@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.domain.ColorKnowledge;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -17,6 +19,7 @@ public class RagService {
     private final InMemoryTonePilotStore store;
     private final int defaultTopK;
 
+    @Autowired
     public RagService(InMemoryTonePilotStore store, @Value("${tonepilot.rag.default-top-k:5}") int defaultTopK) {
         this.store = store;
         this.defaultTopK = defaultTopK;
@@ -80,3 +83,5 @@ public class RagService {
         return values;
     }
 }
+
+

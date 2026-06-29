@@ -1,5 +1,7 @@
 package com.tonepilot.agent;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.domain.PhotoAnalysis;
 import com.tonepilot.service.RagService;
 import com.tonepilot.web.dto.RagSearchItem;
@@ -16,6 +18,7 @@ public class DefaultRagRetrievalAgent implements RagRetrievalAgent {
     private final RagService ragService;
     private final int defaultTopK;
 
+    @Autowired
     public DefaultRagRetrievalAgent(
             RagService ragService,
             @Value("${tonepilot.rag.default-top-k:5}") int defaultTopK
@@ -58,3 +61,5 @@ public class DefaultRagRetrievalAgent implements RagRetrievalAgent {
         }
     }
 }
+
+

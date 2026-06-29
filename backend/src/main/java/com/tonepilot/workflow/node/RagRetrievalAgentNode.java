@@ -1,5 +1,7 @@
 package com.tonepilot.workflow.node;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.RagRetrievalAgent;
 import com.tonepilot.workflow.AgentNode;
 import com.tonepilot.workflow.TonePilotAgentContext;
@@ -10,6 +12,7 @@ public class RagRetrievalAgentNode implements AgentNode {
 
     private final RagRetrievalAgent ragRetrievalAgent;
 
+    @Autowired
     public RagRetrievalAgentNode(RagRetrievalAgent ragRetrievalAgent) {
         this.ragRetrievalAgent = ragRetrievalAgent;
     }
@@ -39,3 +42,5 @@ public class RagRetrievalAgentNode implements AgentNode {
         ragRetrievalAgent.retrieve(context);
     }
 }
+
+

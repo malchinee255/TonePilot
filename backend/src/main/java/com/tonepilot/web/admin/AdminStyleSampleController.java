@@ -1,5 +1,7 @@
 package com.tonepilot.web.admin;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.domain.StyleSample;
@@ -19,6 +21,7 @@ public class AdminStyleSampleController {
     private final StyleSampleService styleSampleService;
     private final StyleKnowledgeService styleKnowledgeService;
 
+    @Autowired
     public AdminStyleSampleController(
             StyleSampleService styleSampleService,
             StyleKnowledgeService styleKnowledgeService
@@ -71,3 +74,5 @@ public class AdminStyleSampleController {
         return ApiResponse.ok(styleKnowledgeService.generateFromSample(sampleId, provider));
     }
 }
+
+

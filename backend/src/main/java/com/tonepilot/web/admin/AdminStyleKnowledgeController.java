@@ -1,5 +1,7 @@
 package com.tonepilot.web.admin;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.service.StyleKnowledgeService;
@@ -15,6 +17,7 @@ public class AdminStyleKnowledgeController {
 
     private final StyleKnowledgeService styleKnowledgeService;
 
+    @Autowired
     public AdminStyleKnowledgeController(StyleKnowledgeService styleKnowledgeService) {
         this.styleKnowledgeService = styleKnowledgeService;
     }
@@ -44,3 +47,5 @@ public class AdminStyleKnowledgeController {
         return ApiResponse.ok(styleKnowledgeService.disable(id));
     }
 }
+
+

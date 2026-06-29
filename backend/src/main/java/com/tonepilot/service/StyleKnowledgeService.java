@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.KnowledgeGenerationAgent;
 import com.tonepilot.ai.AiProviderContext;
 import com.tonepilot.common.NotFoundException;
@@ -23,6 +25,7 @@ public class StyleKnowledgeService {
     private final StyleSampleService styleSampleService;
     private final KnowledgeGenerationAgent knowledgeGenerationAgent;
 
+    @Autowired
     public StyleKnowledgeService(
             InMemoryTonePilotStore store,
             StyleService styleService,
@@ -146,3 +149,5 @@ public class StyleKnowledgeService {
         return value == null || value.isBlank() ? fallback : value;
     }
 }
+
+

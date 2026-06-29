@@ -1,5 +1,7 @@
 package com.tonepilot.persistence;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +23,7 @@ public class DomainSnapshotRepository {
     private final ObjectMapper objectMapper;
     private final ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
 
+    @Autowired
     public DomainSnapshotRepository(
             PersistenceProperties properties,
             ObjectMapper objectMapper,
@@ -116,3 +119,5 @@ public class DomainSnapshotRepository {
         }
     }
 }
+
+

@@ -1,5 +1,7 @@
 package com.tonepilot.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.observability.AuditEvent;
 import com.tonepilot.observability.LlmCallLog;
@@ -15,6 +17,7 @@ public class ObservabilityController {
 
     private final ObservabilityService observabilityService;
 
+    @Autowired
     public ObservabilityController(ObservabilityService observabilityService) {
         this.observabilityService = observabilityService;
     }
@@ -29,3 +32,5 @@ public class ObservabilityController {
         return ApiResponse.ok(observabilityService.latestAuditEvents(limit));
     }
 }
+
+

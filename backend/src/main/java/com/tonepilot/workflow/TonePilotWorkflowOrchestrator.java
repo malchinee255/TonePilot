@@ -1,5 +1,7 @@
 package com.tonepilot.workflow;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.ai.AiProviderContext;
 import com.tonepilot.observability.TraceContext;
 import com.tonepilot.web.dto.AdjustmentGenerateRequest;
@@ -17,6 +19,7 @@ public class TonePilotWorkflowOrchestrator {
     private final WorkflowRunRepository workflowRunRepository;
     private final List<AgentNode> nodes;
 
+    @Autowired
     public TonePilotWorkflowOrchestrator(
             WorkflowRunRepository workflowRunRepository,
             List<AgentNode> nodes
@@ -114,3 +117,5 @@ public class TonePilotWorkflowOrchestrator {
         }
     }
 }
+
+

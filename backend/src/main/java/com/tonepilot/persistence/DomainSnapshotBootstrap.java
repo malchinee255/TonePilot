@@ -1,6 +1,8 @@
 package com.tonepilot.persistence;
 
-import com.tonepilot.domain.ColorAdjustment;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.domain.Photo;
 import com.tonepilot.domain.PhotoAnalysis;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -14,6 +16,7 @@ public class DomainSnapshotBootstrap {
     private final InMemoryTonePilotStore store;
     private final DomainSnapshotRepository snapshotRepository;
 
+    @Autowired
     public DomainSnapshotBootstrap(
             InMemoryTonePilotStore store,
             DomainSnapshotRepository snapshotRepository
@@ -59,3 +62,5 @@ public class DomainSnapshotBootstrap {
         }
     }
 }
+
+

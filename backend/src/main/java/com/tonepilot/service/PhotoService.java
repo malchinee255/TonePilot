@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.ImageAnalysisAgent;
 import com.tonepilot.ai.AiProviderContext;
 import com.tonepilot.common.NotFoundException;
@@ -21,6 +23,7 @@ public class PhotoService {
     private final ImageAnalysisAgent imageAnalysisAgent;
     private final DomainSnapshotRepository snapshotRepository;
 
+    @Autowired
     public PhotoService(
             InMemoryTonePilotStore store,
             ObjectStorageService storageService,
@@ -108,3 +111,5 @@ public class PhotoService {
         return store.latestAnalysisForPhoto(photoId);
     }
 }
+
+

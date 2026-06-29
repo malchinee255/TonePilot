@@ -1,9 +1,11 @@
 package com.tonepilot.agent;
 
-import com.tonepilot.domain.ColorAdjustment;
-import com.tonepilot.domain.LightroomBasicParams;
-import com.tonepilot.domain.LightroomEffectsParams;
-import com.tonepilot.domain.LightroomHslParams;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.LightroomBasicParams;
+import com.tonepilot.colorgrading.domain.LightroomEffectsParams;
+import com.tonepilot.colorgrading.domain.LightroomHslParams;
 import com.tonepilot.harness.ParamRangeValidator;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,7 @@ public class RuleBasedParamValidationAgent implements ParamValidationAgent {
 
     private final ParamRangeValidator rangeValidator;
 
+    @Autowired
     public RuleBasedParamValidationAgent(ParamRangeValidator rangeValidator) {
         this.rangeValidator = rangeValidator;
     }
@@ -53,6 +56,7 @@ public class RuleBasedParamValidationAgent implements ParamValidationAgent {
                 basic,
                 hsl,
                 effects,
+                normalized.extended(),
                 normalized.steps() == null ? List.of() : normalized.steps(),
                 rawResponse,
                 normalized.createdAt() == null ? Instant.now() : normalized.createdAt()
@@ -72,6 +76,7 @@ public class RuleBasedParamValidationAgent implements ParamValidationAgent {
                 adjustment.basic() == null ? defaultBasic() : adjustment.basic(),
                 adjustment.hsl() == null ? defaultHsl() : adjustment.hsl(),
                 adjustment.effects() == null ? new LightroomEffectsParams(0, 0) : adjustment.effects(),
+                adjustment.extended(),
                 adjustment.steps(),
                 adjustment.rawResponse(),
                 adjustment.createdAt()
@@ -86,7 +91,7 @@ public class RuleBasedParamValidationAgent implements ParamValidationAgent {
                 clamp(value.shadows(), -100, 100),
                 clamp(value.whites(), -100, 100),
                 clamp(value.blacks(), -100, 100),
-                clamp(value.temperature(), -50, 50),
+                clampTemperature(value.temperature()),
                 clamp(value.tint(), -50, 50),
                 clamp(value.texture(), -100, 100),
                 clamp(value.clarity(), -100, 100),
@@ -153,7 +158,16 @@ public class RuleBasedParamValidationAgent implements ParamValidationAgent {
         return Math.max(min, Math.min(max, value));
     }
 
+    private int clampTemperature(int value) {
+        if (Math.abs(value) >= 1000) {
+            return clamp(value, 2000, 50000);
+        }
+        return clamp(value, -50, 50);
+    }
+
     private double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
 }
+
+

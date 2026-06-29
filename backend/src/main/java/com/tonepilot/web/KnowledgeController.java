@@ -1,5 +1,7 @@
 package com.tonepilot.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.ApiResponse;
 import com.tonepilot.domain.ColorKnowledge;
 import com.tonepilot.service.KnowledgeService;
@@ -16,6 +18,7 @@ public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
 
+    @Autowired
     public KnowledgeController(KnowledgeService knowledgeService) {
         this.knowledgeService = knowledgeService;
     }
@@ -36,3 +39,5 @@ public class KnowledgeController {
         return ApiResponse.ok();
     }
 }
+
+

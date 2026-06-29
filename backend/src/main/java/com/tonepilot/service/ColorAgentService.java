@@ -1,7 +1,9 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.common.NotFoundException;
-import com.tonepilot.domain.ColorAdjustment;
+import com.tonepilot.colorgrading.domain.ColorAdjustment;
 import com.tonepilot.observability.ObservabilityService;
 import com.tonepilot.persistence.DomainSnapshotRepository;
 import com.tonepilot.store.InMemoryTonePilotStore;
@@ -25,6 +27,7 @@ public class ColorAgentService {
     private final ObservabilityService observabilityService;
     private final DomainSnapshotRepository snapshotRepository;
 
+    @Autowired
     public ColorAgentService(
             InMemoryTonePilotStore store,
             TonePilotWorkflowOrchestrator workflowOrchestrator,
@@ -50,6 +53,7 @@ public class ColorAgentService {
                 draft.basic(),
                 draft.hsl(),
                 draft.effects(),
+                draft.extended(),
                 draft.steps(),
                 workflowMetadata(context, draft),
                 Instant.now()
@@ -88,3 +92,5 @@ public class ColorAgentService {
         return metadata;
     }
 }
+
+

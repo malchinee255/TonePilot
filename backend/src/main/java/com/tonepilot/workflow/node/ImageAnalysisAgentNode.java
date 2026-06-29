@@ -1,5 +1,7 @@
 package com.tonepilot.workflow.node;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.domain.PhotoAnalysis;
 import com.tonepilot.service.PhotoService;
 import com.tonepilot.workflow.AgentNode;
@@ -11,6 +13,7 @@ public class ImageAnalysisAgentNode implements AgentNode {
 
     private final PhotoService photoService;
 
+    @Autowired
     public ImageAnalysisAgentNode(PhotoService photoService) {
         this.photoService = photoService;
     }
@@ -41,3 +44,5 @@ public class ImageAnalysisAgentNode implements AgentNode {
         context.setPhotoAnalysis(analysis);
     }
 }
+
+

@@ -1,5 +1,7 @@
 package com.tonepilot.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.tonepilot.agent.StyleAnalysisAgent;
 import com.tonepilot.ai.AiProviderContext;
 import com.tonepilot.common.NotFoundException;
@@ -22,6 +24,7 @@ public class StyleSampleService {
     private final ObjectStorageService storageService;
     private final StyleAnalysisAgent styleAnalysisAgent;
 
+    @Autowired
     public StyleSampleService(
             InMemoryTonePilotStore store,
             StyleService styleService,
@@ -119,3 +122,5 @@ public class StyleSampleService {
         return updated;
     }
 }
+
+
