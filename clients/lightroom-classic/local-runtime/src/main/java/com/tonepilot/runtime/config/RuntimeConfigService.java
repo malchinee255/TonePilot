@@ -13,14 +13,11 @@ import java.util.Map;
 @Service
 public class RuntimeConfigService {
 
-    private final ObjectMapper objectMapper;
-    private final BridgePaths bridgePaths;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
-    public RuntimeConfigService(ObjectMapper objectMapper, RuntimeProperties properties) {
-        this.objectMapper = objectMapper;
-        this.bridgePaths = new BridgePaths(properties);
-    }
+    private RuntimeProperties properties;
 
     public Map<String, Object> readPublicConfig() {
         Map<String, Object> config = readInternalConfig();
@@ -37,8 +34,8 @@ public class RuntimeConfigService {
         Map<String, Object> current = readConfig();
         merge(current, patch == null ? Map.of() : patch);
         try {
-            Files.createDirectories(bridgePaths.fsRoot());
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(bridgePaths.fs("runtime-config.json").toFile(), current);
+            Files.createDirectories(bridgePaths().fsRoot());
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(bridgePaths().fs("runtime-config.json").toFile(), current);
         } catch (Exception exception) {
             throw new IllegalArgumentException("保存本地运行时配置失败：" + exception.getMessage(), exception);
         }
@@ -47,7 +44,7 @@ public class RuntimeConfigService {
 
     private Map<String, Object> readConfig() {
         Map<String, Object> defaults = defaultConfig();
-        var path = bridgePaths.fs("runtime-config.json");
+        var path = bridgePaths().fs("runtime-config.json");
         if (!Files.exists(path)) {
             return defaults;
         }
@@ -97,5 +94,9 @@ public class RuntimeConfigService {
         )));
         config.put("knowledge", new LinkedHashMap<>(Map.of("enabled", false, "syncUrl", "")));
         return config;
+    }
+
+    private BridgePaths bridgePaths() {
+        return new BridgePaths(properties);
     }
 }

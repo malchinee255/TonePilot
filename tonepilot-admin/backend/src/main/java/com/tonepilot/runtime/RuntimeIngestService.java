@@ -17,21 +17,16 @@ import java.util.UUID;
 @Service
 public class RuntimeIngestService {
 
-    private final PersistenceProperties persistenceProperties;
-    private final ObjectMapper objectMapper;
-    private final ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
     private final List<RuntimeEventRecord> localEvents = new ArrayList<>();
 
     @Autowired
-    public RuntimeIngestService(
-            PersistenceProperties persistenceProperties,
-            ObjectMapper objectMapper,
-            ObjectProvider<JdbcTemplate> jdbcTemplateProvider
-    ) {
-        this.persistenceProperties = persistenceProperties;
-        this.objectMapper = objectMapper;
-        this.jdbcTemplateProvider = jdbcTemplateProvider;
-    }
+    private PersistenceProperties persistenceProperties;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
 
     public synchronized RuntimeDeviceRegistrationResponse registerDevice(RuntimeDeviceRegistrationRequest request) {
         String fingerprint = required(request.fingerprint(), "fingerprint");

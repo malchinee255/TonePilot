@@ -19,16 +19,18 @@ public class AdminRuntimeClient {
 
     private static final Logger log = LoggerFactory.getLogger(AdminRuntimeClient.class);
 
-    private final RuntimeProperties properties;
-    private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    @Autowired
+    private RuntimeProperties properties = new RuntimeProperties();
 
     @Autowired
-    public AdminRuntimeClient(RuntimeProperties properties, ObjectMapper objectMapper) {
-        this(properties, objectMapper, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    private HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+
+    public AdminRuntimeClient() {
     }
 
-    public AdminRuntimeClient(RuntimeProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
+    AdminRuntimeClient(RuntimeProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;

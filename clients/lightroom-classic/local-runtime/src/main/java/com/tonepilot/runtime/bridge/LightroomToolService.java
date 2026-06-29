@@ -13,14 +13,11 @@ import java.util.UUID;
 @Service
 public class LightroomToolService {
 
-    private final RuntimeProperties properties;
-    private final LightroomStateService stateService;
+    @Autowired
+    private RuntimeProperties properties;
 
     @Autowired
-    public LightroomToolService(RuntimeProperties properties, LightroomStateService stateService) {
-        this.properties = properties;
-        this.stateService = stateService;
-    }
+    private LightroomStateService stateService;
 
     public Map<String, Object> applyDevelopSettings(Map<String, Object> developSettings) {
         if (developSettings == null || developSettings.isEmpty()) {

@@ -14,14 +14,11 @@ import java.util.Map;
 @Service
 public class LightroomStateService {
 
-    private final ObjectMapper objectMapper;
-    private final BridgePaths bridgePaths;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
-    public LightroomStateService(ObjectMapper objectMapper, RuntimeProperties properties) {
-        this.objectMapper = objectMapper;
-        this.bridgePaths = new BridgePaths(properties);
-    }
+    private RuntimeProperties properties;
 
     public Map<String, Object> status() {
         Map<String, Object> heartbeat = readHeartbeat();
@@ -41,7 +38,7 @@ public class LightroomStateService {
     }
 
     public Map<String, Object> selectedPhoto() {
-        var path = bridgePaths.fs("selected-photo.json");
+        var path = bridgePaths().fs("selected-photo.json");
         if (!Files.exists(path)) {
             return Map.of("available", false, "message", "Lightroom 插件尚未写入当前照片状态。");
         }
@@ -55,7 +52,7 @@ public class LightroomStateService {
             long ageSeconds = Math.max(0, Instant.now().getEpochSecond() - updatedAt);
             Map<String, Object> result = new LinkedHashMap<>(payload);
             result.put("ageSeconds", ageSeconds);
-            if (Files.exists(bridgePaths.fs("results", "selected-preview.jpg"))) {
+            if (Files.exists(bridgePaths().fs("results", "selected-preview.jpg"))) {
                 result.put("previewUrl", "/files/selected-preview.jpg?t=" + updatedAt);
             }
             return result;
@@ -65,11 +62,11 @@ public class LightroomStateService {
     }
 
     public BridgePaths bridgePaths() {
-        return bridgePaths;
+        return new BridgePaths(properties);
     }
 
     private Map<String, Object> readHeartbeat() {
-        var path = bridgePaths.fs("heartbeat.txt");
+        var path = bridgePaths().fs("heartbeat.txt");
         if (!Files.exists(path)) {
             return Map.of();
         }

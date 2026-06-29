@@ -13,29 +13,23 @@ import java.util.Map;
 @Service
 public class RuntimeAgentOrchestrator {
 
-    private final LightroomStateService stateService;
-    private final LightroomToolService toolService;
-    private final RuleBasedRuntimeAgent ruleAgent;
-    private final ModelRuntimeAgent modelAgent;
-    private final RuntimeConfigService configService;
-    private final AdminRuntimeClient adminRuntimeClient;
+    @Autowired
+    private LightroomStateService stateService;
 
     @Autowired
-    public RuntimeAgentOrchestrator(
-            LightroomStateService stateService,
-            LightroomToolService toolService,
-            RuleBasedRuntimeAgent ruleAgent,
-            ModelRuntimeAgent modelAgent,
-            RuntimeConfigService configService,
-            AdminRuntimeClient adminRuntimeClient
-    ) {
-        this.stateService = stateService;
-        this.toolService = toolService;
-        this.ruleAgent = ruleAgent;
-        this.modelAgent = modelAgent;
-        this.configService = configService;
-        this.adminRuntimeClient = adminRuntimeClient;
-    }
+    private LightroomToolService toolService;
+
+    @Autowired
+    private RuleBasedRuntimeAgent ruleAgent;
+
+    @Autowired
+    private ModelRuntimeAgent modelAgent;
+
+    @Autowired
+    private RuntimeConfigService configService;
+
+    @Autowired
+    private AdminRuntimeClient adminRuntimeClient;
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> chat(Map<String, Object> payload) {

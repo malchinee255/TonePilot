@@ -22,12 +22,8 @@ import java.util.List;
 @RequestMapping("/api/runtime")
 public class RuntimeIngestController {
 
-    private final RuntimeIngestService runtimeIngestService;
-
     @Autowired
-    public RuntimeIngestController(RuntimeIngestService runtimeIngestService) {
-        this.runtimeIngestService = runtimeIngestService;
-    }
+    private RuntimeIngestService runtimeIngestService;
 
     @PostMapping("/devices/register")
     public ApiResponse<RuntimeDeviceRegistrationResponse> registerDevice(

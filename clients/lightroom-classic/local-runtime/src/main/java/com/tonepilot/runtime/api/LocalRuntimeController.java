@@ -21,20 +21,14 @@ import java.util.Map;
 @RestController
 public class LocalRuntimeController {
 
-    private final LightroomStateService stateService;
-    private final RuntimeConfigService configService;
-    private final RuntimeAgentOrchestrator orchestrator;
+    @Autowired
+    private LightroomStateService stateService;
 
     @Autowired
-    public LocalRuntimeController(
-            LightroomStateService stateService,
-            RuntimeConfigService configService,
-            RuntimeAgentOrchestrator orchestrator
-    ) {
-        this.stateService = stateService;
-        this.configService = configService;
-        this.orchestrator = orchestrator;
-    }
+    private RuntimeConfigService configService;
+
+    @Autowired
+    private RuntimeAgentOrchestrator orchestrator;
 
     @GetMapping("/status")
     public Map<String, Object> status() {

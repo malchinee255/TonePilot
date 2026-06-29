@@ -23,16 +23,18 @@ public class ModelRuntimeAgent {
 
     private static final Logger log = LoggerFactory.getLogger(ModelRuntimeAgent.class);
 
-    private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
-    private final RuleBasedRuntimeAgent ruleAgent;
+    @Autowired
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    public ModelRuntimeAgent(ObjectMapper objectMapper, RuleBasedRuntimeAgent ruleAgent) {
-        this(objectMapper, ruleAgent, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+    private RuleBasedRuntimeAgent ruleAgent = new RuleBasedRuntimeAgent();
+
+    private HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+
+    public ModelRuntimeAgent() {
     }
 
-    public ModelRuntimeAgent(ObjectMapper objectMapper, RuleBasedRuntimeAgent ruleAgent, HttpClient httpClient) {
+    ModelRuntimeAgent(ObjectMapper objectMapper, RuleBasedRuntimeAgent ruleAgent, HttpClient httpClient) {
         this.objectMapper = objectMapper;
         this.ruleAgent = ruleAgent;
         this.httpClient = httpClient;
