@@ -35,7 +35,7 @@ if command -v ss >/dev/null 2>&1 && ss -ltnp | grep -q ":8080 "; then
 fi
 
 echo "启动后端，连接 Docker Compose 的 MySQL、Redis、MinIO"
-cd "${ROOT_DIR}/backend"
+cd "${ROOT_DIR}/tonepilot-admin/backend"
 
 export TONEPILOT_DB_URL="jdbc:mysql://localhost:3306/tonepilot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
 export TONEPILOT_DB_USERNAME="tonepilot"
@@ -59,4 +59,4 @@ setsid nohup mvn spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &
 echo "$!" > "${LOG_DIR}/backend-compose.pid"
 echo "后端启动中，日志：${BACKEND_LOG}"
 echo "后端进程 PID 文件：${LOG_DIR}/backend-compose.pid"
-echo "查看状态：curl http://localhost:8080/api/tuning/lightroom/status"
+echo "查看状态：curl http://localhost:8080/api/admin/styles"

@@ -48,18 +48,18 @@ flowchart TD
 - `ColorPlanningAgent`：生成 Lightroom 参数。
 - `ParamValidationAgent`：校验参数范围并收敛过激调整。
 
-插件端多轮微调使用 `com.tonepilot.lightroom.application.TuningAdjustmentPlanner`，在当前 Develop 参数上继续生成增量。相关代码按 DDD 风格拆分为：
+插件端多轮微调在 `clients/lightroom-classic/local-runtime` 中完成。Local Runtime 不是云端后端，而是摄影师本机的轻量执行器，核心模块为：
 
-- `colorgrading.domain`：调色参数和值对象，例如 `ColorAdjustment`、`LightroomBasicParams`。
-- `lightroom.domain`：Lightroom 调色会话中的领域对象，例如 `ParameterDelta`、`TuningPlan`。
-- `lightroom.application`：插件端调色应用服务和意图规划。
-- `lightroom.infrastructure`：Lightroom Develop Settings 映射。
-- `lightroom.interfaces`：插件端 REST API 请求、响应和 Controller。
+- `src/bridge-runtime.js`：读取 Lightroom 插件写入的照片状态，提供 Agent 控制台和本地 HTTP API。
+- `src/local-rule-agent.js`：无模型密钥时的离线规则 Agent。
+- `src/model-agent.js`：OpenAI / Qwen 的 OpenAI 兼容接口适配。
+- `src/runtime-config.js`：本机模型供应商、模型名和 API Key 配置。
+- `test/`：验证本地运行时协议、规则、模型适配和插件入口。
 
-每轮返回：
+插件端每轮返回：
 
 - `assistantMessage`：给用户看的 Agent 回复。
-- `adjustment`：后端语义化参数。
+- `runtimeProvider`：本轮实际使用的本地规则、OpenAI 或 Qwen。
 - `deltas`：本轮参数变化、原值、新值、变化量和原因。
 - `developSettings`：可直接传给 Lightroom `photo:applyDevelopSettings` 的参数。
 
@@ -90,6 +90,14 @@ flowchart LR
 - 知识库：新增调色知识，审核、拒绝或禁用知识。
 - 样片管理：上传管理员样片，分析样片并生成知识草稿。
 - 观测评估：查看 LLM 调用、审计事件，运行 benchmark。
+
+管理端工程统一放在 `tonepilot-admin`：
+
+```text
+tonepilot-admin/
+├── backend/   Spring Boot 管理端后端
+└── frontend/  Vue 3 管理端前端
+```
 
 ## Lightroom Classic 客户端
 

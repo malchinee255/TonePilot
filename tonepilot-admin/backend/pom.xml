@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>com.tonepilot</groupId>
-    <artifactId>tonepilot-backend</artifactId>
+    <artifactId>tonepilot-admin-backend</artifactId>
     <version>0.1.0-SNAPSHOT</version>
-    <name>TonePilot 后端</name>
-    <description>非生成式摄影调色 Agent 后端</description>
+    <name>TonePilot 管理端后端</name>
+    <description>TonePilot 风格知识库、样片、评测和观测管理端后端</description>
 
     <properties>
         <java.version>17</java.version>

@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: tonepilot-backend
+    name: tonepilot-admin-backend
   servlet:
     multipart:
       max-file-size: 30MB

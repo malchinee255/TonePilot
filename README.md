@@ -33,14 +33,14 @@ http://localhost:8080
 只快速验证 Java 服务时，也可以使用 H2 和本地文件存储：
 
 ```bash
-cd backend
+cd tonepilot-admin/backend
 mvn spring-boot:run
 ```
 
 启动管理端：
 
 ```bash
-cd frontend
+cd tonepilot-admin/frontend
 npm install
 npm run dev
 ```
@@ -116,6 +116,31 @@ curl http://127.0.0.1:33335/status
 curl http://127.0.0.1:33335/api/lightroom/selected-photo
 ```
 
+## Local Runtime 核心 Agent 流程
+
+Local Runtime 文件较少是有意设计：它不是云端管理后端，而是摄影师电脑上的 Lightroom 本地执行器。核心交互流程如下：
+
+```text
+Lightroom 选中照片
+  -> Lua 插件写入 selected-photo.json、selected-preview.jpg 和当前 Develop 参数
+  -> Local Runtime 读取当前照片状态
+  -> 用户在 Agent 控制台输入修图意图
+  -> Local Runtime 根据模型配置选择本地规则、OpenAI 或 Qwen
+  -> 生成本轮 Develop Settings、参数 diff 和 Agent 回复
+  -> Local Runtime 写入 apply-jobs
+  -> Lua 插件调用 photo:applyDevelopSettings
+  -> Lightroom 显示真实修图结果
+```
+
+因此它的核心文件集中在：
+
+- `server.js`：启动本地 HTTP 服务。
+- `src/bridge-runtime.js`：Lightroom 文件协议、Agent 控制台和本地 API。
+- `src/local-rule-agent.js`：完全离线可用的规则 Agent。
+- `src/model-agent.js`：OpenAI / Qwen 的 OpenAI 兼容接口适配。
+- `src/runtime-config.js`：保存在本机的模型配置。
+- `test/`：Local Runtime 行为测试。
+
 ## 当前修图能力
 
 已真实支持的是 Lightroom 全局 Develop Settings：
@@ -140,7 +165,7 @@ curl http://127.0.0.1:33335/api/lightroom/selected-photo
 可以复制后端示例配置：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/backend
+cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
 cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
@@ -171,18 +196,19 @@ export QWEN2_VISION_MODEL=你的_Qwen2_视觉模型
 
 ```text
 TonePilot/
-├── backend/                         Spring Boot 后端
-│   ├── agent/                       规则模式和模型版 Agent 适配
-│   ├── ai/                          LangChain4j 与 OpenAI 兼容模型客户端
-│   ├── colorgrading/domain/         调色参数和值对象
-│   ├── domain/                      照片、风格、样片、知识等通用领域对象
-│   ├── evaluation/                  自动评测
-│   ├── observability/               LLM 调用日志和审计事件
-│   ├── persistence/                 数据库快照和恢复
-│   ├── service/                     管理端、RAG、样片、风格等业务服务
-│   ├── web/                         管理端、插件端、评测和观测 API
-│   └── workflow/                    多 Agent 编排、上下文和 trace
-├── frontend/                        Vue 3 管理端
+├── tonepilot-admin/                 云端管理端工程
+│   ├── backend/                     Spring Boot 管理端后端
+│   │   ├── agent/                   规则模式和模型版 Agent 适配
+│   │   ├── ai/                      LangChain4j 与 OpenAI 兼容模型客户端
+│   │   ├── colorgrading/domain/     调色参数和值对象
+│   │   ├── domain/                  照片、风格、样片、知识等通用领域对象
+│   │   ├── evaluation/              自动评测
+│   │   ├── observability/           LLM 调用日志和审计事件
+│   │   ├── persistence/             数据库快照和恢复
+│   │   ├── service/                 管理端、RAG、样片、风格等业务服务
+│   │   ├── web/                     管理端、评测和观测 API
+│   │   └── workflow/                多 Agent 编排、上下文和 trace
+│   └── frontend/                    Vue 3 管理端前端
 ├── clients/
 │   └── lightroom-classic/
 │       ├── local-runtime/           本地运行时、Agent 控制台、安装脚本和测试
@@ -242,14 +268,14 @@ TonePilot 分为两类 Agent 编排：
 后端测试：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/backend
+cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
 mvn test
 ```
 
 前端构建：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/frontend
+cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/frontend
 npm run build
 ```
 
