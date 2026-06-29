@@ -79,11 +79,12 @@
 
     .shell {
       display: grid;
-      grid-template-columns: minmax(520px, 1fr) minmax(520px, 1fr);
+      grid-template-columns: 176px minmax(460px, .95fr) minmax(520px, 1.05fr);
       height: 100vh;
       min-width: 960px;
     }
 
+    .left-rail,
     .preview-side,
     .chat-side {
       min-width: 0;
@@ -93,8 +94,38 @@
       border-right: 1px solid var(--line);
     }
 
+    .left-rail {
+      background: #1b1b1b;
+      padding: 16px 12px;
+      gap: 16px;
+    }
+
     .chat-side {
       border-right: 0;
+    }
+
+    .rail-brand {
+      padding: 2px 4px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rail-brand strong {
+      display: block;
+      color: #f0f0f0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .rail-brand span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .rail-status {
+      padding: 0 4px 10px;
+      border-bottom: 1px solid var(--line);
     }
 
     .header {
@@ -161,17 +192,18 @@
 
     .left-tabs {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 6px;
-      margin: 0 0 14px;
+      gap: 8px;
+      margin: 0;
     }
 
     .left-tabs button {
-      min-height: 32px;
-      padding: 0 8px;
+      width: 100%;
+      min-height: 38px;
+      padding: 0 12px;
       color: #b8b8b8;
       background: #2a2a2a;
       font-size: 12px;
+      text-align: left;
     }
 
     .left-tabs button.active {
@@ -449,9 +481,24 @@
         grid-template-columns: 1fr;
       }
 
+      .left-rail,
       .preview-side,
       .chat-side {
         border-right: 0;
+      }
+
+      .left-rail {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+
+      .left-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .left-tabs button {
+        text-align: center;
       }
 
       .compare {
@@ -462,13 +509,27 @@
 </head>
 <body>
   <div class="shell">
+    <nav class="left-rail" aria-label="TonePilot 菜单">
+      <div class="rail-brand">
+        <strong>TonePilot</strong>
+        <span>Lightroom Agent</span>
+      </div>
+      <div class="rail-status">
+        <span class="status" id="runtimeStatus">连接中...</span>
+      </div>
+      <div class="left-tabs" role="tablist" aria-label="左侧菜单">
+        <button type="button" class="active" data-left-tab="photo">当前照片</button>
+        <button type="button" data-left-tab="history">调色记录</button>
+        <button type="button" data-left-tab="model">模型设置</button>
+      </div>
+    </nav>
+
     <aside class="preview-side">
       <header class="header">
         <div class="title">
-          <h1>TonePilot</h1>
-          <p>Lightroom Agent</p>
+          <h1 id="leftPanelTitle">当前照片</h1>
+          <p id="leftPanelSubtitle">预览、元数据和 Agent 判断</p>
         </div>
-        <span class="status" id="runtimeStatus">连接中...</span>
       </header>
       <div class="scroll">
         <section class="section">
@@ -484,12 +545,6 @@
             </div>
           </div>
         </section>
-
-        <div class="left-tabs" role="tablist" aria-label="左侧面板">
-          <button type="button" class="active" data-left-tab="photo">当前照片</button>
-          <button type="button" data-left-tab="history">调色记录</button>
-          <button type="button" data-left-tab="model">模型设置</button>
-        </div>
 
         <section class="section left-tab-panel active" id="photoTabPanel" data-left-panel="photo">
           <h2>当前照片</h2>
@@ -577,6 +632,8 @@
     const afterEmpty = document.querySelector('#afterEmpty')
     const analysisSummary = document.querySelector('#analysisSummary')
     const versionList = document.querySelector('#versionList')
+    const leftPanelTitle = document.querySelector('#leftPanelTitle')
+    const leftPanelSubtitle = document.querySelector('#leftPanelSubtitle')
     const leftTabButtons = Array.from(document.querySelectorAll('[data-left-tab]'))
     const leftPanels = Array.from(document.querySelectorAll('[data-left-panel]'))
     const chat = document.querySelector('#chat')
@@ -594,9 +651,18 @@
     let comparisonPhotoKey = ''
     let lastBeforeUrl = ''
 
+    const leftPanelCopy = {
+      photo: ['当前照片', '预览、元数据和 Agent 判断'],
+      history: ['调色记录', '查看当前照片的每次调色版本'],
+      model: ['模型设置', '切换本地规则、OpenAI 或阿里 Qwen2']
+    }
+
     function activateLeftTab(name) {
       leftTabButtons.forEach(button => button.classList.toggle('active', button.dataset.leftTab === name))
       leftPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.leftPanel === name))
+      const copy = leftPanelCopy[name] || leftPanelCopy.photo
+      leftPanelTitle.textContent = copy[0]
+      leftPanelSubtitle.textContent = copy[1]
     }
 
     function escapeHtml(value) {

@@ -16,6 +16,7 @@ class AgentConsolePageTest {
             html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
 
+        assertThat(html).contains("class=\"left-rail\"");
         assertThat(html).contains("data-left-tab=\"photo\"");
         assertThat(html).contains("data-left-tab=\"history\"");
         assertThat(html).contains("data-left-tab=\"model\"");
