@@ -124,6 +124,36 @@ Lightroom 选中照片
 
 管理端不直接控制用户本地 Lightroom，也不是用户日常修图的强依赖。离线模式下，本地 Runtime 仍可用规则模式完成基础调色。
 
+## 调色素材导入
+
+管理端新增“素材导入”入口，用来把外部调色经验沉淀成可审核知识。第一版支持先登记知识来源，再导入文本或参数类素材，最后生成待审核知识：
+
+```text
+知识来源
+  -> 素材内容
+      -> 抽取任务
+          -> 待审核知识
+              -> 审核通过后进入运行时 RAG 检索
+```
+
+当前支持的来源类型：
+
+- `douyin_video`：抖音调色教程，先保存链接和字幕/摘要文本。
+- `master_edit_record`：大师调色记录，可导入参数变化、Lightroom 参数或调色说明。
+- `manual_note`：人工整理的调色笔记。
+- `style_sample`：风格样片相关说明。
+
+当前支持的素材类型：
+
+- `transcript`：视频字幕或转写文本。
+- `summary`：教程摘要。
+- `lightroom_params`：Lightroom 全局调色参数。
+- `param_delta`：参数变化记录。
+- `xmp`：XMP 片段。
+- `manual_text`：手工文本。
+
+说明：抖音视频自动抓取器属于后续连接器能力，本阶段先完成“链接 + 字幕/摘要/参数文本”的最小闭环，保证素材可以进入审核池并被管理端追踪来源。
+
 ## 项目结构
 
 ```text
@@ -168,6 +198,14 @@ TonePilot/
 - `POST /api/runtime/devices/register`
 - `POST /api/runtime/events`
 - `GET /api/runtime/events?userId=...`
+
+管理端素材导入：
+
+- `GET /api/admin/knowledge-sources`
+- `POST /api/admin/knowledge-sources`
+- `GET /api/admin/knowledge-sources/{sourceId}/materials`
+- `POST /api/admin/knowledge-sources/{sourceId}/materials`
+- `POST /api/admin/knowledge-sources/{sourceId}/materials/{materialId}/extract`
 
 管理端观测与评估：
 
