@@ -1,0 +1,18 @@
+server:
+  port: ${TONEPILOT_LIGHTROOM_BRIDGE_PORT:33335}
+
+spring:
+  application:
+    name: tonepilot-local-runtime
+
+tonepilot:
+  runtime:
+    bridge:
+      port: ${TONEPILOT_LIGHTROOM_BRIDGE_PORT:33335}
+      host: ${TONEPILOT_LIGHTROOM_BRIDGE_HOST:0.0.0.0}
+      root: ${TONEPILOT_LIGHTROOM_BRIDGE_ROOT:${user.home}/.tonepilot-lightroom-bridge}
+      lightroom-root: ${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT:${tonepilot.runtime.bridge.root}}
+      apply-timeout-ms: ${TONEPILOT_LIGHTROOM_BRIDGE_APPLY_TIMEOUT_MS:60000}
+    admin:
+      base-url: ${TONEPILOT_ADMIN_BASE_URL:}
+      device-token: ${TONEPILOT_ADMIN_DEVICE_TOKEN:}

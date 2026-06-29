@@ -48,6 +48,39 @@ CREATE TABLE IF NOT EXISTS domain_snapshot (
     PRIMARY KEY (domain_type, domain_id)
 );
 
+CREATE TABLE IF NOT EXISTS runtime_user (
+    id VARCHAR(64) PRIMARY KEY,
+    display_name VARCHAR(128),
+    source VARCHAR(64),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS runtime_device (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    fingerprint VARCHAR(128) NOT NULL,
+    device_name VARCHAR(128),
+    endpoint VARCHAR(255),
+    metadata_json TEXT,
+    last_seen_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE KEY idx_runtime_device_fingerprint (fingerprint),
+    KEY idx_runtime_device_user (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS runtime_event (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    device_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    session_id VARCHAR(128),
+    payload_json TEXT,
+    created_at TIMESTAMP,
+    KEY idx_runtime_event_user_time (user_id, created_at)
+);
+
 CREATE INDEX idx_llm_call_log_started_at ON llm_call_log(started_at);
 CREATE INDEX idx_audit_event_created_at ON audit_event(created_at);
 CREATE INDEX idx_domain_snapshot_type ON domain_snapshot(domain_type);

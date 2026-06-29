@@ -1,13 +1,27 @@
 # TonePilot
 
-TonePilot 是一个非生成式 AI 摄影调色 Agent。系统不直接生成图片，而是模拟摄影师的调色判断，输出可解释、可校验、可落地到 Lightroom Classic 的调色参数。
+TonePilot 是一个非生成式 AI 摄影调色 Agent。它不直接生成图片，而是模拟摄影师的调色判断，输出可解释、可校验、可落地到 Lightroom Classic 的调色参数。
 
-当前工程保留两个产品端：
+## 产品架构
 
-- 管理端：Web 管理台，用于维护调色风格、样片、知识库、审核状态、可观测日志和自动评测。
-- 插件端：Lightroom Classic 用户端，摄影师在 Lightroom 中选中照片，通过 Agent 对话完成修图，并由本地运行时把参数应用到当前照片。
+当前工程分成两个产品端：
 
-管理端后端面向云端部署，负责知识库、样片、风格、观测和评测；摄影师日常修图不依赖管理端后端。Lightroom 插件端由 TonePilot Local Runtime 在本机完成对话、模型调用、本地规则兜底和 Lightroom 参数应用。真实修图效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
+- `clients/lightroom-classic`：Lightroom Classic 用户端，包括 Lua 插件和本地 Java Local Runtime。用户在 Lightroom 中选中照片，通过 Agent 对话完成真实调色。
+- `tonepilot-admin`：云端管理端，包括 Spring Boot 后端和 Vue 管理端前端，用于维护风格知识库、样片、配置、用户设备、会话、Trace、工具调用和评估数据。
+
+推荐架构：
+
+```text
+Lightroom Classic 插件
+  -> TonePilot Local Runtime（本地 Java Agent）
+      -> 本地规则 / 用户配置的大模型 / 可选管理端模型代理
+      -> Lightroom 文件桥接任务
+  -> TonePilot Admin（云端管理端）
+      -> 用户、设备、知识库、配置、会话、Trace、工具调用记录
+      -> MySQL / Redis / 对象存储
+```
+
+本地运行时是用户修图闭环里的 Agent 主体；管理端是云端控制面和数据中心。Local Runtime 不使用 SQLite，也不直接连接 MySQL/Redis；长期数据通过管理端 API 入库。
 
 ## 快速启动
 
@@ -17,27 +31,27 @@ TonePilot 是一个非生成式 AI 摄影调色 Agent。系统不直接生成图
 cd /home/lvchanghong/Code/TonePilot
 ```
 
-启动本地依赖和后端：
+启动管理端依赖和后端：
 
 ```bash
 chmod +x scripts/start-local-compose.sh
 ./scripts/start-local-compose.sh
 ```
 
-脚本会启动 Docker Compose 中的 MySQL、Redis、MinIO，并启动后端服务。默认 API 地址：
+脚本会启动 Docker Compose 中的 MySQL、Redis、MinIO，并启动管理端后端。默认 API 地址：
 
 ```text
 http://localhost:8080
 ```
 
-只快速验证 Java 服务时，也可以使用 H2 和本地文件存储：
+只启动管理端后端：
 
 ```bash
 cd tonepilot-admin/backend
 mvn spring-boot:run
 ```
 
-启动管理端：
+启动管理端前端：
 
 ```bash
 cd tonepilot-admin/frontend
@@ -45,27 +59,22 @@ npm install
 npm run dev
 ```
 
-默认管理端地址：
+默认前端地址：
 
 ```text
 http://localhost:5173
 ```
 
-只启动基础设施：
+## Lightroom 用户端
 
-```bash
-docker compose up -d redis mysql minio
+安装插件需要在 Windows PowerShell 执行：
+
+```powershell
+cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
+.\install-plugin.ps1
 ```
 
-依赖用途：
-
-- Redis：保存多 Agent 工作流上下文和 trace，支持分布式内存与服务重启后的上下文恢复。
-- MySQL：生产形态关系数据库。开发时可用 H2 文件数据库。
-- MinIO：本地模拟 OSS，用于管理端样片等文件对象存储。
-
-## Lightroom 插件端
-
-插件运行在 Windows 的 Lightroom Classic 中。TonePilot Local Runtime 是用户侧核心，推荐运行在 WSL：
+启动本地 Java Runtime：
 
 ```bash
 cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
@@ -73,216 +82,118 @@ chmod +x start-bridge-wsl.sh
 ./start-bridge-wsl.sh
 ```
 
-第一次安装插件需要在 Windows PowerShell 执行：
-
-```powershell
-cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
-.\install-plugin.ps1
-```
-
-Lightroom 中的入口：
-
-```text
-文件 > 增效工具附加功能 > 打开 TonePilot Agent 控制台
-```
-
-插件端链路：
-
-```text
-Lightroom 当前选中照片
-  -> Lua 插件读取照片信息和 Develop 参数
-  -> TonePilot Local Runtime 打开 Agent 控制台
-  -> 用户用对话描述调色意图
-  -> Local Runtime 使用本地规则或用户配置的 OpenAI/Qwen 生成参数
-  -> Local Runtime 写入任务文件
-  -> Lua 插件调用 photo:applyDevelopSettings 应用到当前照片
-```
-
-Local Runtime 默认地址：
+默认地址：
 
 ```text
 http://127.0.0.1:33335
 ```
 
-检查 Local Runtime 状态：
+Lightroom 入口：
 
-```bash
-curl http://127.0.0.1:33335/status
+```text
+文件 > 增效工具附加功能 > 打开 TonePilot Agent 控制台
 ```
 
-查看当前 Lightroom 选中照片状态：
-
-```bash
-curl http://127.0.0.1:33335/api/lightroom/selected-photo
-```
-
-## Local Runtime 核心 Agent 流程
-
-Local Runtime 文件较少是有意设计：它不是云端管理后端，而是摄影师电脑上的 Lightroom 本地执行器。核心交互流程如下：
+## 本地运行时 Agent 流程
 
 ```text
 Lightroom 选中照片
-  -> Lua 插件写入 selected-photo.json、selected-preview.jpg 和当前 Develop 参数
+  -> Lua 插件写入 selected-photo.json、selected-preview.jpg 和当前 Develop Settings
   -> Local Runtime 读取当前照片状态
   -> 用户在 Agent 控制台输入修图意图
-  -> Local Runtime 根据模型配置选择本地规则、OpenAI 或 Qwen
-  -> 生成本轮 Develop Settings、参数 diff 和 Agent 回复
+  -> Local Runtime 执行意图分析、照片类型判断、调色策略规划
+  -> Local Runtime 使用本地规则、OpenAI、Qwen 或管理端模型代理生成本轮参数
+  -> 参数校验，只输出需要修改的 Develop Settings
   -> Local Runtime 写入 apply-jobs
   -> Lua 插件调用 photo:applyDevelopSettings
   -> Lightroom 显示真实修图结果
+  -> Local Runtime 可选上报管理端事件和 Trace
 ```
 
-因此它的核心文件集中在：
+注意：没有被用户意图或 Agent 明确规划的参数不会被修改。例如用户只说“夜景电影感，再亮一点”，不会顺手改白平衡。
 
-- `server.js`：启动本地 HTTP 服务。
-- `src/bridge-runtime.js`：Lightroom 文件协议、Agent 控制台和本地 API。
-- `src/local-rule-agent.js`：完全离线可用的规则 Agent。
-- `src/model-agent.js`：OpenAI / Qwen 的 OpenAI 兼容接口适配。
-- `src/runtime-config.js`：保存在本机的模型配置。
-- `test/`：Local Runtime 行为测试。
+## 管理端职责
 
-## 当前修图能力
+管理端负责：
 
-已真实支持的是 Lightroom 全局 Develop Settings：
+- 用户和设备注册。
+- 风格知识库、样片、Prompt、规则、模型配置管理。
+- 运行时会话、消息、Trace、LLM 调用、Lightroom 工具调用记录。
+- 自动评估、统计分析和可观测性。
+- MySQL、Redis、MinIO 等服务端存储。
 
-- 基础：曝光、对比度、高光、阴影、白色色阶、黑色色阶、色温、色调、纹理、清晰度、去朦胧、自然饱和度、饱和度。
-- HSL：红、橙、黄、绿、浅绿、蓝、紫、洋红的色相、饱和度、明亮度。
-- 效果：颗粒、暗角。
-- 扩展项：曲线、锐化、降噪、颜色分级、镜头校正、透视变换、暗角细项、颗粒细项、相机校准、裁剪和方向等全局参数。
-
-暂未真实自动应用：
-
-- Lightroom AI 天空、主体、背景等局部蒙版。
-- 修复画笔和内容识别移除。
-- 局部区域参数写回。
-
-后续可以先支持局部修图计划展示，再实验 Lightroom SDK 或插件可行的真实落地方式。
-
-## 大模型配置
-
-默认使用 `rule` 本地规则模式，不需要模型密钥。真实模型通过 LangChain4j 的 OpenAI 兼容接口接入，当前支持 OpenAI 和阿里 Qwen2。
-
-可以复制后端示例配置：
-
-```bash
-cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
-cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-mvn spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-然后在 `application-local.yml` 里填写 `tonepilot.ai.openai` 或 `tonepilot.ai.qwen2`。
-
-OpenAI 环境变量：
-
-```bash
-export TONEPILOT_AI_PROVIDER=openai
-export OPENAI_API_KEY=你的_OpenAI_Key
-export OPENAI_CHAT_MODEL=你的_OpenAI_文本模型
-export OPENAI_VISION_MODEL=你的_OpenAI_视觉模型
-```
-
-阿里 Qwen2 环境变量：
-
-```bash
-export TONEPILOT_AI_PROVIDER=qwen2
-export DASHSCOPE_API_KEY=你的_DashScope_Key
-export QWEN2_CHAT_MODEL=你的_Qwen2_文本模型
-export QWEN2_VISION_MODEL=你的_Qwen2_视觉模型
-```
-
-插件端请求也可以传入 `provider`，临时选择 `rule`、`openai` 或 `qwen2`。
+管理端不直接控制用户本地 Lightroom，也不是用户日常修图的强依赖。离线模式下，本地 Runtime 仍可用规则模式完成基础调色。
 
 ## 项目结构
 
 ```text
 TonePilot/
-├── tonepilot-admin/                 云端管理端工程
+├── tonepilot-admin/
 │   ├── backend/                     Spring Boot 管理端后端
-│   │   ├── agent/                   规则模式和模型版 Agent 适配
+│   │   ├── agent/                   管理端 Agent 能力和模型适配
 │   │   ├── ai/                      LangChain4j 与 OpenAI 兼容模型客户端
 │   │   ├── colorgrading/domain/     调色参数和值对象
-│   │   ├── domain/                  照片、风格、样片、知识等通用领域对象
-│   │   ├── evaluation/              自动评测
 │   │   ├── observability/           LLM 调用日志和审计事件
-│   │   ├── persistence/             数据库快照和恢复
-│   │   ├── service/                 管理端、RAG、样片、风格等业务服务
-│   │   ├── web/                     管理端、评测和观测 API
-│   │   └── workflow/                多 Agent 编排、上下文和 trace
+│   │   ├── runtime/                 Local Runtime 设备、用户和事件接入
+│   │   ├── service/                 知识库、样片、风格等业务服务
+│   │   ├── web/                     管理端 API
+│   │   └── workflow/                管理端多 Agent 编排和上下文
 │   └── frontend/                    Vue 3 管理端前端
 ├── clients/
 │   └── lightroom-classic/
-│       ├── local-runtime/           本地运行时、Agent 控制台、安装脚本和测试
-│       │   ├── server.js            本地运行时启动入口
-│       │   └── src/                 本地规则、模型适配、Lightroom 文件协议
-│       └── plugin/                  Lightroom Classic Lua 插件源码
-├── docs/                            架构说明
+│       ├── plugin/                  Lightroom Classic Lua 插件源码
+│       └── local-runtime/           本地 Java Agent Runtime
+│           ├── src/main/java/       运行时代码
+│           ├── src/test/java/       运行时测试
+│           ├── pom.xml
+│           └── start-bridge-wsl.sh
+├── docs/                            架构和计划文档
 ├── scripts/                         本地启动脚本
 └── docker-compose.yml               Redis、MySQL、MinIO 本地依赖
 ```
 
 ## 核心 API
 
-插件端本地运行时：
+本地 Runtime：
 
 - `GET /status`
+- `GET /agent-console`
 - `GET /api/lightroom/selected-photo`
 - `GET /api/runtime/config`
 - `POST /api/runtime/config`
 - `POST /api/lightroom-agent/chat`
 
-管理端：
+管理端 Runtime 接入：
 
-- `POST /api/admin/styles`
-- `GET /api/admin/styles`
-- `GET /api/admin/styles/{id}`
-- `PUT /api/admin/styles/{id}`
-- `DELETE /api/admin/styles/{id}`
-- `POST /api/admin/style-samples/upload`
-- `GET /api/admin/style-samples`
-- `POST /api/admin/style-samples/{sampleId}/analyze`
-- `POST /api/admin/style-samples/{sampleId}/generate-knowledge`
-- `POST /api/knowledge`
-- `GET /api/knowledge`
-- `DELETE /api/knowledge/{id}`
-- `GET /api/admin/knowledge`
-- `PUT /api/admin/knowledge/{id}`
-- `POST /api/admin/knowledge/{id}/approve`
-- `POST /api/admin/knowledge/{id}/reject`
-- `POST /api/admin/knowledge/{id}/disable`
+- `POST /api/runtime/devices/register`
+- `POST /api/runtime/events`
+- `GET /api/runtime/events?userId=...`
 
-观测与评测：
+管理端观测与评估：
 
 - `GET /api/observability/llm-calls`
 - `GET /api/observability/audit-events`
 - `POST /api/evaluation/benchmark`
 
-## Agent 编排职责
-
-TonePilot 分为两类 Agent 编排：
-
-- 插件端 Local Runtime：负责 Lightroom 用户修图会话，读取当前照片状态，分析用户意图，使用本地规则或用户配置的 OpenAI/Qwen 生成本轮 Develop Settings，并把任务交给 Lua 插件应用到当前照片。
-- 管理端后端：负责云端知识库、样片分析、风格维护、RAG、自动评测和观测日志。它不直接控制本机 Lightroom，也不是摄影师日常修图的必需依赖。
-
 ## 验证命令
 
-后端测试：
+管理端后端：
 
 ```bash
 cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
 mvn test
 ```
 
-前端构建：
+本地 Runtime：
+
+```bash
+cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
+mvn test
+```
+
+管理端前端：
 
 ```bash
 cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/frontend
 npm run build
-```
-
-Local Runtime 测试：
-
-```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
-npm test
-npm run check
 ```
