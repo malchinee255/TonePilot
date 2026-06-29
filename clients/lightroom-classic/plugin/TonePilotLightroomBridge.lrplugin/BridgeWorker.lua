@@ -10,7 +10,7 @@ local BridgeWorker = {
     running = false
 }
 
-local WORKER_BUILD = 18
+local WORKER_BUILD = 19
 local lastPreviewKey = ""
 local lastPreviewAt = 0
 local lastMetadataDebugKey = ""
@@ -565,22 +565,29 @@ function exportPreview(photo, previewPath)
     createDirectory(previewDir)
 
     local jpegData = nil
-    local done = false
-    photo:requestJpegThumbnail(1200, 1200, function(jpeg)
-        jpegData = jpeg
-        done = true
-    end)
-
     local startedAt = os.time()
-    while not done do
-        if os.time() - startedAt > 15 then
-            error("Lightroom 生成预览缩略图超时")
-        end
-        LrTasks.sleep(0.1)
-    end
+    local retrySeconds = Config.previewRetrySeconds or 20
 
-    if jpegData == nil or jpegData == "" then
-        error("Lightroom 没有生成预览缩略图")
+    while jpegData == nil or jpegData == "" do
+        local done = false
+        photo:requestJpegThumbnail(1200, 1200, function(jpeg)
+            jpegData = jpeg
+            done = true
+        end)
+
+        while not done do
+            if os.time() - startedAt > retrySeconds then
+                error("Lightroom 生成预览缩略图超时")
+            end
+            LrTasks.sleep(0.1)
+        end
+
+        if jpegData == nil or jpegData == "" then
+            if os.time() - startedAt > retrySeconds then
+                error("Lightroom 没有生成预览缩略图")
+            end
+            LrTasks.sleep(0.5)
+        end
     end
     writeBinaryFile(previewPath, jpegData)
 end

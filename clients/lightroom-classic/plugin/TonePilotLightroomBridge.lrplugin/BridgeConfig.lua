@@ -8,5 +8,6 @@ return {
     bridgePort = 33335,
     pollSeconds = 3,
     metadataDebugIntervalSeconds = 30,
-    writeAccessTimeoutSeconds = 30
+    writeAccessTimeoutSeconds = 30,
+    previewRetrySeconds = 20
 }
