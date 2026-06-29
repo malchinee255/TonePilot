@@ -5,6 +5,7 @@ import com.tonepilot.runtime.bridge.LightroomStateService;
 import com.tonepilot.runtime.config.RuntimeConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
 
@@ -29,6 +32,9 @@ public class LocalRuntimeController {
 
     @Autowired
     private RuntimeAgentOrchestrator orchestrator;
+
+    @Autowired
+    private ResourceLoader resourceLoader;
 
     @GetMapping("/status")
     public Map<String, Object> status() {
@@ -57,32 +63,18 @@ public class LocalRuntimeController {
 
     @GetMapping("/agent-console")
     public ResponseEntity<String> agentConsole() {
-        return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .body("""
-                        <!doctype html>
-                        <html lang="zh-CN">
-                        <head><meta charset="utf-8"><title>TonePilot Agent</title></head>
-                        <body style="margin:0;background:#202020;color:#d6d6d6;font-family:Arial,'Microsoft YaHei',sans-serif;">
-                        <main style="display:grid;grid-template-columns:1fr 1fr;height:100vh;">
-                          <section style="padding:24px;border-right:1px solid #3a3a3a;">
-                            <h2>Lightroom 预览</h2>
-                            <pre id="photo">读取中...</pre>
-                          </section>
-                          <section style="padding:24px;display:flex;flex-direction:column;gap:12px;">
-                            <h2>Agent 对话修图</h2>
-                            <div id="chat" style="flex:1;overflow:auto;border:1px solid #3a3a3a;padding:12px;"></div>
-                            <textarea id="prompt" style="height:84px;background:#2b2b2b;color:#eee;border:1px solid #555;">先分析这张照片，修成夜景电影感，再亮一点</textarea>
-                            <button id="send" style="height:40px;background:#4f6680;color:white;border:0;">发送并修图</button>
-                          </section>
-                        </main>
-                        <script>
-                        async function poll(){const r=await fetch('/api/lightroom/selected-photo');photo.textContent=JSON.stringify(await r.json(),null,2)}
-                        send.onclick=async()=>{chat.innerHTML+='<p><b>你：</b>'+prompt.value+'</p>';const r=await fetch('/api/lightroom-agent/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:prompt.value})});chat.innerHTML+='<pre>'+JSON.stringify(await r.json(),null,2)+'</pre>'}
-                        poll();setInterval(poll,2000)
-                        </script>
-                        </body></html>
-                        """);
+        try {
+            var resource = resourceLoader.getResource("classpath:static/agent-console.html");
+            try (var input = resource.getInputStream()) {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        } catch (IOException error) {
+            return ResponseEntity.internalServerError()
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("Agent 控制台加载失败：" + error.getMessage());
+        }
     }
 
     @GetMapping("/files/{fileName}")

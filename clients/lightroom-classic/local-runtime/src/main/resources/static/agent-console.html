@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TonePilot Agent 控制台</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #1f1f1f;
+      --bar: #242424;
+      --panel: #262626;
+      --panel-soft: #2d2d2d;
+      --line: #3b3b3b;
+      --line-strong: #4a4a4a;
+      --text: #d9d9d9;
+      --muted: #9f9f9f;
+      --accent: #8aa7c4;
+      --ok: #7dbb8c;
+      --warn: #d0aa62;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.55 "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    textarea,
+    select,
+    input {
+      font: inherit;
+      color: var(--text);
+      background: var(--panel-soft);
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      outline: none;
+    }
+
+    button {
+      min-height: 34px;
+      padding: 0 14px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    button:hover {
+      border-color: #6b7782;
+      background: #353a3f;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 88px;
+      max-height: 180px;
+      resize: vertical;
+      padding: 12px;
+    }
+
+    select,
+    input {
+      min-height: 34px;
+      padding: 0 10px;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) minmax(520px, 1fr);
+      height: 100vh;
+      min-width: 960px;
+    }
+
+    .preview-side,
+    .chat-side {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+    }
+
+    .chat-side {
+      border-right: 0;
+    }
+
+    .header {
+      min-height: 72px;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bar);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 750;
+    }
+
+    .title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status {
+      color: var(--muted);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.warn {
+      color: var(--warn);
+    }
+
+    .scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px 22px 22px;
+    }
+
+    .section {
+      padding: 0 0 18px;
+      margin: 0 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      color: #cfe3f6;
+      font-weight: 750;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #151515;
+      min-height: 320px;
+      aspect-ratio: 2.4 / 1;
+    }
+
+    .pane {
+      position: relative;
+      min-width: 0;
+      border-right: 1px solid var(--line);
+      background: #151515;
+    }
+
+    .pane:last-child {
+      border-right: 0;
+    }
+
+    .pane::before {
+      content: attr(data-label);
+      position: absolute;
+      z-index: 2;
+      top: 10px;
+      left: 10px;
+      max-width: calc(100% - 20px);
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 255, 255, .2);
+      border-radius: 4px;
+      background: rgba(22, 22, 22, .78);
+      color: #f0f0f0;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pane img {
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .empty {
+      height: 100%;
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      padding: 30px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      gap: 8px 12px;
+      font-size: 13px;
+    }
+
+    .kv span {
+      color: var(--muted);
+    }
+
+    .kv strong {
+      color: var(--text);
+      font-weight: 650;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .analysis {
+      display: grid;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .analysis strong {
+      color: var(--text);
+    }
+
+    .versions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .version {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+
+    .version strong,
+    .version span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .version span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .chat {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .message {
+      max-width: 72%;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      overflow-wrap: anywhere;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #303841;
+      border-color: #43505c;
+    }
+
+    .message.agent {
+      align-self: flex-start;
+    }
+
+    .role {
+      display: block;
+      margin-bottom: 8px;
+      color: #c8def4;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .message ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .deltas {
+      margin-top: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .delta {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #232323;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .delta strong {
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .composer {
+      padding: 12px 22px 16px;
+      border-top: 1px solid var(--line);
+      background: var(--bar);
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      grid-template-areas:
+        "chips chips"
+        "prompt action"
+        "config config";
+      gap: 10px;
+    }
+
+    .chips {
+      grid-area: chips;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chips button {
+      min-height: 28px;
+      padding: 0 10px;
+      color: #c8c8c8;
+      background: #2d2d2d;
+      font-size: 12px;
+    }
+
+    #prompt {
+      grid-area: prompt;
+      min-width: 0;
+    }
+
+    .actions {
+      grid-area: action;
+      display: grid;
+      grid-template-rows: 34px 1fr;
+      gap: 8px;
+    }
+
+    .primary {
+      background: #4a5f73;
+      border-color: #5f7892;
+      color: #f2f6fb;
+    }
+
+    .config {
+      grid-area: config;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .config label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1180px) {
+      body {
+        overflow: auto;
+      }
+
+      .shell {
+        min-width: 0;
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 1fr;
+      }
+
+      .preview-side,
+      .chat-side {
+        border-right: 0;
+      }
+
+      .compare {
+        min-height: 260px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="preview-side">
+      <header class="header">
+        <div class="title">
+          <h1>TonePilot</h1>
+          <p>Lightroom Agent</p>
+        </div>
+        <span class="status" id="runtimeStatus">连接中...</span>
+      </header>
+      <div class="scroll">
+        <section class="section">
+          <h2>Lightroom 预览</h2>
+          <div class="compare">
+            <div class="pane" id="beforePane" data-label="修图前">
+              <img id="beforeImage" alt="修图前预览" />
+              <div class="empty" id="beforeEmpty">等待 Lightroom 当前照片预览。</div>
+            </div>
+            <div class="pane" id="afterPane" data-label="修图后">
+              <img id="afterImage" alt="修图后预览" />
+              <div class="empty" id="afterEmpty">发送调色请求后显示修图后预览。</div>
+            </div>
+          </div>
+        </section>
+        <section class="section">
+          <h2>当前照片</h2>
+          <div class="kv" id="photoMeta">
+            <span>状态</span><strong>读取中...</strong>
+          </div>
+        </section>
+        <section class="section">
+          <h2>Agent 判断</h2>
+          <div class="analysis" id="analysisSummary">
+            <div>发送调色请求后，Agent 会根据用户意图、照片元数据和知识库策略动态判断修图方向。</div>
+          </div>
+        </section>
+        <section class="section">
+          <h2>版本历史</h2>
+          <div class="versions" id="versionList">
+            <div class="empty">暂无修图版本。</div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <main class="chat-side">
+      <header class="header">
+        <div class="title">
+          <h1>Agent 对话修图</h1>
+          <p>基于 Lightroom 当前选中照片持续微调</p>
+        </div>
+        <span class="status" id="photoStatus">等待照片</span>
+      </header>
+      <section class="chat" id="chat">
+        <div class="message agent">
+          <span class="role">Agent</span>
+          选择 Lightroom 照片后，直接告诉我你想要的效果。我会先分析意图和照片类型，再应用调色参数；之后你可以继续说“再亮一点”“肤色更通透”“绿色别那么脏”。
+        </div>
+      </section>
+      <footer class="composer">
+        <div class="chips">
+          <button type="button" data-prompt="自然优化，保持真实，只调整必要参数">自然优化</button>
+          <button type="button" data-prompt="夜景电影感，压高光，提暗部，增强氛围">夜景电影感</button>
+          <button type="button" data-prompt="再亮一点，但不要改变白平衡">再亮一点</button>
+          <button type="button" data-prompt="绿色别那么脏，降低绿色饱和度，保持画面自然">绿色干净</button>
+          <button type="button" data-prompt="胶片感，轻微颗粒和暗角，不改变白平衡">胶片感</button>
+        </div>
+        <textarea id="prompt" placeholder="例如：先分析这张照片，修成夜景电影感，再亮一点">先分析这张照片，修成夜景电影感，再亮一点</textarea>
+        <div class="actions">
+          <select id="provider">
+            <option value="rule">本地规则</option>
+            <option value="openai">OpenAI</option>
+            <option value="qwen2">阿里 Qwen2</option>
+          </select>
+          <button id="send" class="primary" type="button">发送并修图</button>
+        </div>
+        <div class="config">
+          <label>Base URL<input id="modelBaseUrl" placeholder="本地规则无需填写" /></label>
+          <label>模型<input id="modelName" placeholder="例如 qwen-plus / gpt-4o-mini" /></label>
+          <label>API Key<input id="modelApiKey" type="password" placeholder="保存在本机运行时" /></label>
+          <button id="saveRuntimeConfig" type="button">保存设置</button>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const runtimeStatus = document.querySelector('#runtimeStatus')
+    const photoStatus = document.querySelector('#photoStatus')
+    const photoMeta = document.querySelector('#photoMeta')
+    const beforePane = document.querySelector('#beforePane')
+    const afterPane = document.querySelector('#afterPane')
+    const beforeImage = document.querySelector('#beforeImage')
+    const afterImage = document.querySelector('#afterImage')
+    const beforeEmpty = document.querySelector('#beforeEmpty')
+    const afterEmpty = document.querySelector('#afterEmpty')
+    const analysisSummary = document.querySelector('#analysisSummary')
+    const versionList = document.querySelector('#versionList')
+    const chat = document.querySelector('#chat')
+    const prompt = document.querySelector('#prompt')
+    const provider = document.querySelector('#provider')
+    const send = document.querySelector('#send')
+    const modelBaseUrl = document.querySelector('#modelBaseUrl')
+    const modelName = document.querySelector('#modelName')
+    const modelApiKey = document.querySelector('#modelApiKey')
+    const saveRuntimeConfig = document.querySelector('#saveRuntimeConfig')
+
+    let currentPhoto = null
+    let sessionId = null
+    let runtimeConfig = null
+    let comparisonPhotoKey = ''
+    let lastBeforeUrl = ''
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+    }
+
+    function setStatus(node, text, type) {
+      node.textContent = text
+      node.className = 'status' + (type ? ' ' + type : '')
+    }
+
+    function addMessage(role, html) {
+      const node = document.createElement('div')
+      node.className = 'message ' + role
+      node.innerHTML = '<span class="role">' + (role === 'user' ? '你' : 'Agent') + '</span>' + html
+      chat.appendChild(node)
+      chat.scrollTop = chat.scrollHeight
+    }
+
+    function setImage(image, empty, url, emptyText) {
+      if (url) {
+        image.src = url
+        image.style.display = 'block'
+        empty.style.display = 'none'
+      } else {
+        image.removeAttribute('src')
+        image.style.display = 'none'
+        empty.textContent = emptyText
+        empty.style.display = 'grid'
+      }
+    }
+
+    function setComparison(beforeUrl, afterUrl, photoName, photoKey, versionId) {
+      comparisonPhotoKey = photoKey || comparisonPhotoKey
+      beforePane.dataset.label = '修图前' + (photoName ? ' · ' + photoName : '')
+      afterPane.dataset.label = '修图后' + (photoName ? ' · ' + photoName : '') + (versionId ? ' · ' + versionId : '')
+      setImage(beforeImage, beforeEmpty, beforeUrl, '等待 Lightroom 当前照片预览。')
+      setImage(afterImage, afterEmpty, afterUrl, '发送调色请求后显示修图后预览。')
+      if (beforeUrl) lastBeforeUrl = beforeUrl
+    }
+
+    function renderPhotoMeta(photo) {
+      photoMeta.innerHTML = [
+        ['文件', photo.fileName],
+        ['格式', photo.fileFormat],
+        ['相机', photo.camera],
+        ['镜头', photo.lens],
+        ['ISO', photo.iso],
+        ['快门', photo.shutterSpeed],
+        ['光圈', photo.aperture],
+        ['焦段', photo.focalLength],
+        ['尺寸', photo.dimensions],
+        ['拍摄时间', photo.captureTime]
+      ].map(([key, value]) => '<span>' + key + '</span><strong>' + escapeHtml(value || '-') + '</strong>').join('')
+    }
+
+    function renderVersions(session, photoName) {
+      const versions = Array.isArray(session?.versions) ? session.versions : []
+      if (!versions.length) {
+        versionList.innerHTML = '<div class="empty">暂无修图版本。</div>'
+        return
+      }
+      versionList.innerHTML = versions.map(version => {
+        const title = version.userIntent || version.agentSummary || 'Agent 修图'
+        const count = Array.isArray(version.deltas) ? version.deltas.length : 0
+        const time = version.createdAt ? new Date(version.createdAt).toLocaleString() : ''
+        return '<div class="version"><div><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(time) + ' · ' + count + ' 个参数</span></div><button type="button" data-id="' + escapeHtml(version.versionId) + '">查看</button></div>'
+      }).join('')
+      versionList.querySelectorAll('button[data-id]').forEach(button => {
+        button.addEventListener('click', () => {
+          const version = versions.find(item => item.versionId === button.dataset.id)
+          if (!version) return
+          setComparison(session.baselinePreviewUrl || lastBeforeUrl, version.previewUrl, photoName, session.photoKey, version.versionId)
+        })
+      })
+    }
+
+    function renderSelectedPhoto(payload) {
+      currentPhoto = payload
+      if (!payload.available) {
+        setStatus(photoStatus, payload.message || '未选中照片', 'warn')
+        photoMeta.innerHTML = '<span>状态</span><strong>' + escapeHtml(payload.message || '未选中照片') + '</strong>'
+        versionList.innerHTML = '<div class="empty">暂无修图版本。</div>'
+        setComparison('', '', '', '', '')
+        return
+      }
+
+      const photo = payload.photo || {}
+      const session = payload.session || {}
+      const photoKey = session.photoKey || ''
+      const photoName = photo.fileName || '当前照片'
+      setStatus(photoStatus, 'Lightroom 已选中：' + photoName, 'ok')
+      renderPhotoMeta(photo)
+      renderVersions(session, photoName)
+
+      const selectedBeforeUrl = session.baselinePreviewUrl || payload.baselinePreviewUrl || payload.previewUrl || ''
+      const selectedAfterUrl = session.currentVersion?.previewUrl || ''
+      const shouldSwitchPhoto = photoKey && comparisonPhotoKey && photoKey !== comparisonPhotoKey
+      if (shouldSwitchPhoto || !comparisonPhotoKey) {
+        setComparison(selectedBeforeUrl, selectedAfterUrl, photoName, photoKey, session.currentVersion?.versionId || '')
+      } else if (!afterImage.getAttribute('src') && selectedAfterUrl) {
+        setComparison(selectedBeforeUrl || lastBeforeUrl, selectedAfterUrl, photoName, photoKey, session.currentVersion?.versionId || '')
+      } else if (!beforeImage.getAttribute('src') && selectedBeforeUrl) {
+        setComparison(selectedBeforeUrl, afterImage.getAttribute('src') || '', photoName, photoKey, session.currentVersion?.versionId || '')
+      }
+    }
+
+    async function pollStatus() {
+      try {
+        const response = await fetch('/status')
+        const payload = await response.json()
+        setStatus(runtimeStatus, payload.available ? '运行时已连接' : '等待插件心跳', payload.available ? 'ok' : 'warn')
+      } catch (error) {
+        setStatus(runtimeStatus, '运行时不可用', 'warn')
+      }
+    }
+
+    async function pollPhoto() {
+      try {
+        const response = await fetch('/api/lightroom/selected-photo')
+        renderSelectedPhoto(await response.json())
+      } catch (error) {
+        setStatus(photoStatus, '无法读取 Lightroom 状态', 'warn')
+      }
+    }
+
+    function renderProviderConfig() {
+      const value = provider.value || 'rule'
+      const config = runtimeConfig?.[value] || {}
+      modelBaseUrl.value = config.baseUrl || ''
+      modelName.value = config.model || ''
+      modelApiKey.value = ''
+      const disabled = value === 'rule'
+      modelBaseUrl.disabled = disabled
+      modelName.disabled = disabled
+      modelApiKey.disabled = disabled
+      saveRuntimeConfig.disabled = disabled
+      modelApiKey.placeholder = disabled ? '本地规则无需填写' : (config.apiKeyConfigured ? '已配置，留空则不修改' : '保存在本机运行时')
+    }
+
+    async function loadRuntimeConfig() {
+      try {
+        const response = await fetch('/api/runtime/config')
+        runtimeConfig = await response.json()
+        provider.value = runtimeConfig.provider || 'rule'
+        renderProviderConfig()
+      } catch (error) {
+        addMessage('agent', '读取本地模型配置失败：' + escapeHtml(error.message))
+      }
+    }
+
+    async function saveConfig() {
+      const value = provider.value || 'rule'
+      const patch = { provider: value }
+      if (value !== 'rule') {
+        patch[value] = {
+          baseUrl: modelBaseUrl.value.trim(),
+          model: modelName.value.trim()
+        }
+        if (modelApiKey.value.trim()) {
+          patch[value].apiKey = modelApiKey.value.trim()
+        }
+      }
+      const response = await fetch('/api/runtime/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      })
+      runtimeConfig = await response.json()
+      renderProviderConfig()
+      addMessage('agent', '本地模型设置已保存。')
+    }
+
+    function renderAgentResult(data) {
+      const analysis = data.analysis || {}
+      const basis = (analysis.basis || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + '（' + escapeHtml(delta.delta) + '）</span></div>').join('')
+      analysisSummary.innerHTML = [
+        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
+        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
+        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
+      ].join('')
+      if (data.beforePreviewUrl || data.afterPreviewUrl) {
+        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
+      }
+      if (data.session) {
+        renderVersions(data.session, data.photo?.fileName || currentPhoto?.photo?.fileName || '')
+      }
+      addMessage('agent', [
+        '<div>意图分析：' + escapeHtml(analysis.intent || '-') + '</div>',
+        '<div>照片类型：' + escapeHtml(analysis.photoType || '-') + '</div>',
+        '<div>建议风格：' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
+        basis ? '<ul>' + basis + '</ul>' : '',
+        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
+        deltas ? '<div class="deltas">' + deltas + '</div>' : ''
+      ].join(''))
+    }
+
+    async function sendMessage() {
+      const message = prompt.value.trim()
+      if (!message) return
+      addMessage('user', escapeHtml(message))
+      send.disabled = true
+      setStatus(photoStatus, 'Agent 正在分析并修图...', '')
+      try {
+        const response = await fetch('/api/lightroom-agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, provider: provider.value, sessionId })
+        })
+        const result = await response.json()
+        if (!result.success) {
+          addMessage('agent', '没有完成修图：' + escapeHtml(result.message || '未知错误'))
+          return
+        }
+        sessionId = result.data.sessionId
+        renderAgentResult(result.data)
+        prompt.value = ''
+        await pollPhoto()
+      } catch (error) {
+        addMessage('agent', '调用失败：' + escapeHtml(error.message))
+      } finally {
+        send.disabled = false
+      }
+    }
+
+    document.querySelectorAll('[data-prompt]').forEach(button => {
+      button.addEventListener('click', () => {
+        prompt.value = button.dataset.prompt || ''
+        sendMessage()
+      })
+    })
+    provider.addEventListener('change', renderProviderConfig)
+    saveRuntimeConfig.addEventListener('click', saveConfig)
+    send.addEventListener('click', sendMessage)
+    prompt.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        sendMessage()
+      }
+    })
+
+    loadRuntimeConfig()
+    pollStatus()
+    pollPhoto()
+    setInterval(pollStatus, 3000)
+    setInterval(pollPhoto, 2000)
+  </script>
+</body>
+</html>
