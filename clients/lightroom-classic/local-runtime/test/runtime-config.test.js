@@ -9,7 +9,7 @@ const {
   writeRuntimeConfig,
   publicRuntimeConfig,
   providerRuntimeConfig
-} = require('./src/runtime-config')
+} = require('../src/runtime-config')
 
 test('本地运行时没有配置文件时默认完全离线使用本地规则', () => {
   const filePath = path.join(os.tmpdir(), `tonepilot-runtime-${Date.now()}.json`)

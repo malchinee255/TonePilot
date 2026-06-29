@@ -3,7 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const test = require('node:test')
 
-const pluginDir = path.join(__dirname, '..', 'plugin', 'TonePilotLightroomBridge.lrplugin')
+const runtimeDir = path.join(__dirname, '..')
+const pluginDir = path.join(__dirname, '..', '..', 'plugin', 'TonePilotLightroomBridge.lrplugin')
 
 test('插件清单暴露常驻 Agent 控制台入口', () => {
   const info = fs.readFileSync(path.join(pluginDir, 'Info.lua'), 'utf8')
@@ -39,7 +40,7 @@ test('Lightroom Worker 降低选图时的轮询和预览导出压力', () => {
 })
 
 test('Agent 控制台只渲染同一照片会话的前后对比', () => {
-  const serverJs = fs.readFileSync(path.join(__dirname, 'src', 'bridge-runtime.js'), 'utf8')
+  const serverJs = fs.readFileSync(path.join(runtimeDir, 'src', 'bridge-runtime.js'), 'utf8')
 
   assert.match(serverJs, /photoKey:\s*session\.photoKey/)
   assert.match(serverJs, /comparisonPhotoKey/)
@@ -56,7 +57,7 @@ test('Agent 控制台使用 Lightroom 深色面板视觉 token', () => {
   const initLua = fs.readFileSync(path.join(pluginDir, 'Init.lua'), 'utf8')
   const shutdownLua = fs.readFileSync(path.join(pluginDir, 'Shutdown.lua'), 'utf8')
   const workerLua = fs.readFileSync(path.join(pluginDir, 'BridgeWorker.lua'), 'utf8')
-  const serverJs = fs.readFileSync(path.join(__dirname, 'src', 'bridge-runtime.js'), 'utf8')
+  const serverJs = fs.readFileSync(path.join(runtimeDir, 'src', 'bridge-runtime.js'), 'utf8')
   const launcher = fs.readFileSync(path.join(pluginDir, 'StartBridgeAndConsole.ps1'), 'utf8')
 
   assert.match(consoleLua, /LrHttp/)
@@ -138,7 +139,7 @@ test('Agent 控制台使用 Lightroom 深色面板视觉 token', () => {
 })
 
 test('Bridge 根入口只负责加载运行时模块', () => {
-  const serverEntry = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8')
+  const serverEntry = fs.readFileSync(path.join(runtimeDir, 'server.js'), 'utf8')
 
   assert.match(serverEntry, /require\('\.\/src\/bridge-runtime'\)/)
   assert.doesNotMatch(serverEntry, /http\.createServer/)

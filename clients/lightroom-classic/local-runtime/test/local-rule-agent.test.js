@@ -1,7 +1,7 @@
 const assert = require('assert')
 const test = require('node:test')
 
-const { createRuleTune } = require('./src/local-rule-agent')
+const { createRuleTune } = require('../src/local-rule-agent')
 
 test('本地规则只修改用户明确表达的参数方向，不默认修改白平衡', () => {
   const result = createRuleTune({

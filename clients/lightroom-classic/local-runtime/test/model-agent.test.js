@@ -1,7 +1,7 @@
 const assert = require('assert')
 const test = require('node:test')
 
-const { createModelTune } = require('./src/model-agent')
+const { createModelTune } = require('../src/model-agent')
 
 test('没有配置 API Key 时模型 Agent 自动回退本地规则', async () => {
   const result = await createModelTune({

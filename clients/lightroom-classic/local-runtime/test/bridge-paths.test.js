@@ -2,7 +2,7 @@ const assert = require('assert')
 const path = require('path')
 const test = require('node:test')
 
-const { createBridgePaths } = require('./bridge-paths')
+const { createBridgePaths } = require('../bridge-paths')
 
 test('为 WSL Bridge 生成文件系统路径和 Lightroom Windows 路径', () => {
   const paths = createBridgePaths({
