@@ -21,6 +21,9 @@ public class InMemoryTonePilotStore {
     public final AtomicLong styleIds = new AtomicLong(1);
     public final AtomicLong sampleIds = new AtomicLong(1);
     public final AtomicLong styleKnowledgeIds = new AtomicLong(1);
+    public final AtomicLong knowledgeSourceIds = new AtomicLong(1);
+    public final AtomicLong knowledgeMaterialIds = new AtomicLong(1);
+    public final AtomicLong knowledgeExtractionJobIds = new AtomicLong(1);
 
     public final Map<Long, Photo> photos = new ConcurrentHashMap<>();
     public final Map<Long, PhotoAnalysis> analyses = new ConcurrentHashMap<>();
@@ -29,6 +32,9 @@ public class InMemoryTonePilotStore {
     public final Map<Long, ColorStyle> styles = new ConcurrentHashMap<>();
     public final Map<Long, StyleSample> samples = new ConcurrentHashMap<>();
     public final Map<Long, StyleKnowledge> styleKnowledge = new ConcurrentHashMap<>();
+    public final Map<Long, KnowledgeSource> knowledgeSources = new ConcurrentHashMap<>();
+    public final Map<Long, KnowledgeMaterial> knowledgeMaterials = new ConcurrentHashMap<>();
+    public final Map<Long, KnowledgeExtractionJob> knowledgeExtractionJobs = new ConcurrentHashMap<>();
     public final Map<String, TonePilotAgentContext> workflowRuns = new ConcurrentHashMap<>();
 
     public Optional<PhotoAnalysis> latestAnalysisForPhoto(Long photoId) {

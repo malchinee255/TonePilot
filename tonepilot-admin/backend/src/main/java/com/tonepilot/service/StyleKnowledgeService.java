@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -79,6 +80,37 @@ public class StyleKnowledgeService {
                 .filter(item -> status == null || status.isBlank() || item.status().equals(status))
                 .sorted(Comparator.comparing(StyleKnowledge::updatedAt).reversed())
                 .toList();
+    }
+
+    public StyleKnowledge createDraftFromMaterial(
+            Long styleId,
+            String title,
+            String scene,
+            String targetStyle,
+            List<String> problems,
+            List<String> strategy,
+            Map<String, String> paramRanges,
+            String content
+    ) {
+        Instant now = Instant.now();
+        StyleKnowledge saved = new StyleKnowledge(
+                store.styleKnowledgeIds.getAndIncrement(),
+                styleId,
+                null,
+                title,
+                scene,
+                targetStyle,
+                problems == null ? List.of() : problems,
+                strategy == null ? List.of() : strategy,
+                paramRanges == null ? Map.of() : paramRanges,
+                content,
+                "local-material-" + UUID.randomUUID(),
+                "pending",
+                now,
+                now
+        );
+        store.styleKnowledge.put(saved.id(), saved);
+        return saved;
     }
 
     public StyleKnowledge get(Long id) {
