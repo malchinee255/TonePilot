@@ -23,10 +23,14 @@ public class RuntimeConfigService {
     }
 
     public Map<String, Object> readPublicConfig() {
-        Map<String, Object> config = readConfig();
+        Map<String, Object> config = readInternalConfig();
         hideApiKey(config, "openai");
         hideApiKey(config, "qwen2");
         return config;
+    }
+
+    public Map<String, Object> readInternalConfig() {
+        return readConfig();
     }
 
     public Map<String, Object> writeConfig(Map<String, Object> patch) {

@@ -3,6 +3,7 @@ package com.tonepilot.runtime.agent;
 import com.tonepilot.runtime.admin.AdminRuntimeClient;
 import com.tonepilot.runtime.bridge.LightroomStateService;
 import com.tonepilot.runtime.bridge.LightroomToolService;
+import com.tonepilot.runtime.config.RuntimeConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,8 @@ public class RuntimeAgentOrchestrator {
     private final LightroomStateService stateService;
     private final LightroomToolService toolService;
     private final RuleBasedRuntimeAgent ruleAgent;
+    private final ModelRuntimeAgent modelAgent;
+    private final RuntimeConfigService configService;
     private final AdminRuntimeClient adminRuntimeClient;
 
     @Autowired
@@ -22,11 +25,15 @@ public class RuntimeAgentOrchestrator {
             LightroomStateService stateService,
             LightroomToolService toolService,
             RuleBasedRuntimeAgent ruleAgent,
+            ModelRuntimeAgent modelAgent,
+            RuntimeConfigService configService,
             AdminRuntimeClient adminRuntimeClient
     ) {
         this.stateService = stateService;
         this.toolService = toolService;
         this.ruleAgent = ruleAgent;
+        this.modelAgent = modelAgent;
+        this.configService = configService;
         this.adminRuntimeClient = adminRuntimeClient;
     }
 
@@ -43,7 +50,15 @@ public class RuntimeAgentOrchestrator {
         Map<String, Object> currentAdjustment = selected.get("currentAdjustment") instanceof Map<?, ?> map
                 ? (Map<String, Object>) map
                 : Map.of();
-        AgentTuneResult tuneResult = ruleAgent.plan(new AgentInput(message, currentAdjustment));
+        Map<String, Object> runtimeConfig = configService.readInternalConfig();
+        String provider = String.valueOf(payload.getOrDefault("provider", runtimeConfig.getOrDefault("provider", "rule")));
+        AgentInput agentInput = new AgentInput(message, currentAdjustment);
+        AgentTuneResult tuneResult = modelAgent.plan(
+                agentInput,
+                provider,
+                runtimeConfig,
+                () -> ruleAgent.plan(agentInput)
+        );
         Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
         String sessionId = String.valueOf(payload.getOrDefault("sessionId", "local-session-" + System.currentTimeMillis()));
         Map<String, Object> data = new LinkedHashMap<>();
