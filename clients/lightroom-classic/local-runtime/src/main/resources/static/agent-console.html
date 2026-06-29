@@ -587,13 +587,12 @@
           <div class="model-settings">
             <label>模型厂商
               <select id="provider">
-                <option value="rule">本地规则</option>
                 <option value="openai">OpenAI</option>
                 <option value="qwen2">阿里 Qwen2</option>
               </select>
             </label>
             <label>Base URL
-              <input id="modelBaseUrl" placeholder="本地规则无需填写" />
+              <input id="modelBaseUrl" placeholder="例如：https://dashscope.aliyuncs.com/compatible-mode/v1" />
             </label>
             <label>模型
               <input id="modelName" placeholder="例如 qwen-plus / gpt-4o-mini" />
@@ -672,7 +671,7 @@
     const leftPanelCopy = {
       photo: ['当前照片', '预览、元数据和 Agent 判断'],
       history: ['调色记录', '查看当前照片的每次调色版本'],
-      model: ['模型设置', '切换本地规则、OpenAI 或阿里 Qwen2']
+      model: ['模型设置', '配置 OpenAI 或阿里 Qwen2']
     }
 
     function activateLeftTab(name) {
@@ -808,24 +807,24 @@
     }
 
     function renderProviderConfig() {
-      const value = provider.value || 'rule'
+      const value = provider.value || 'qwen2'
       const config = runtimeConfig?.[value] || {}
       modelBaseUrl.value = config.baseUrl || ''
       modelName.value = config.model || ''
       modelApiKey.value = ''
-      const disabled = value === 'rule'
+      const disabled = false
       modelBaseUrl.disabled = disabled
       modelName.disabled = disabled
       modelApiKey.disabled = disabled
       saveRuntimeConfig.disabled = disabled
-      modelApiKey.placeholder = disabled ? '本地规则无需填写' : (config.apiKeyConfigured ? '已配置，留空则不修改' : '保存在本机运行时')
+      modelApiKey.placeholder = config.apiKeyConfigured ? '已配置，留空则不修改' : '保存在本机运行时'
     }
 
     async function loadRuntimeConfig() {
       try {
         const response = await fetch('/api/runtime/config')
         runtimeConfig = await response.json()
-        provider.value = runtimeConfig.provider || 'rule'
+        provider.value = runtimeConfig.provider || 'qwen2'
         renderProviderConfig()
       } catch (error) {
         addMessage('agent', '读取本地模型配置失败：' + escapeHtml(error.message))
@@ -833,16 +832,14 @@
     }
 
     async function saveConfig() {
-      const value = provider.value || 'rule'
+      const value = provider.value || 'qwen2'
       const patch = { provider: value }
-      if (value !== 'rule') {
-        patch[value] = {
-          baseUrl: modelBaseUrl.value.trim(),
-          model: modelName.value.trim()
-        }
-        if (modelApiKey.value.trim()) {
-          patch[value].apiKey = modelApiKey.value.trim()
-        }
+      patch[value] = {
+        baseUrl: modelBaseUrl.value.trim(),
+        model: modelName.value.trim()
+      }
+      if (modelApiKey.value.trim()) {
+        patch[value].apiKey = modelApiKey.value.trim()
       }
       const response = await fetch('/api/runtime/config', {
         method: 'POST',
@@ -1013,6 +1010,43 @@
         '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
         knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
         deltas ? '<div class="agent-block"><strong>修改参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
+        toolText,
+        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : ''
+      ].join(''))
+      if (data.action === 'tool_submitted' && data.apply?.jobId) {
+        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
+      }
+    }
+
+    function renderAgentResult(data) {
+      const analysis = data.analysis || {}
+      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
+      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
+      const localPlans = (data.localAdjustments || []).map(plan => {
+        const region = plan.region ? JSON.stringify(plan.region) : '-'
+        const settings = plan.settings ? JSON.stringify(plan.settings) : '{}'
+        return '<div class="delta"><strong>' + escapeHtml(plan.target || plan.type || '局部区域') + '</strong><span>' + escapeHtml(plan.type || '-') + ' / ' + escapeHtml(plan.coordinateSpace || 'normalized_crop') + '<br />区域：' + escapeHtml(region) + '<br />参数：' + escapeHtml(settings) + '<br />' + escapeHtml(plan.reason || '') + '</span></div>'
+      }).join('')
+      const capabilityText = data.capabilities?.supportsLocalMasks
+        ? 'Lightroom 当前支持执行局部蒙版。'
+        : '当前 Lightroom 插件暂不直接写入局部蒙版；以下内容是 Agent 的相对坐标蒙版计划。'
+      analysisSummary.innerHTML = [
+        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
+        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
+        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
+      ].join('')
+      if (data.beforePreviewUrl || data.afterPreviewUrl) {
+        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
+      }
+      const toolText = data.action === 'tool_submitted'
+        ? '<div class="agent-block">我已经调用 Lightroom 全局调色工具，正在等待本地插件处理完成。</div>'
+        : ''
+      addMessage('agent', [
+        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
+        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
+        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
+        deltas ? '<div class="agent-block"><strong>全局调色参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
+        localPlans ? '<div class="agent-block"><strong>局部蒙版计划</strong>\n' + escapeHtml(capabilityText) + '<div class="deltas">' + localPlans + '</div></div>' : '',
         toolText,
         data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : ''
       ].join(''))

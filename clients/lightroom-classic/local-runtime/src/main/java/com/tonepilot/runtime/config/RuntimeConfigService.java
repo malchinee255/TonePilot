@@ -81,7 +81,7 @@ public class RuntimeConfigService {
 
     private Map<String, Object> defaultConfig() {
         Map<String, Object> config = new LinkedHashMap<>();
-        config.put("provider", "rule");
+        config.put("provider", "qwen2");
         config.put("openai", new LinkedHashMap<>(Map.of(
                 "apiKey", "",
                 "baseUrl", "https://api.openai.com/v1",

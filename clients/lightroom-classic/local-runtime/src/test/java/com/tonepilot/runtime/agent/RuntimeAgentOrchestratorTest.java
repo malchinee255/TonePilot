@@ -37,7 +37,7 @@ class RuntimeAgentOrchestratorTest {
         ));
 
         assertThat(result).containsEntry("success", false);
-        assertThat(String.valueOf(result.get("message"))).contains("Lightroom 插件不可用");
+        assertThat(String.valueOf(result.get("message"))).contains("Lightroom");
         verify(context.toolService, never()).applyDevelopSettings(anyMap());
         verify(context.traceLogger).warn(eq("agent.lightroom.unavailable"), eq("session-1"), anyMap());
     }
@@ -46,12 +46,12 @@ class RuntimeAgentOrchestratorTest {
     void analysisOnlyRequestRespondsWithoutApplyingLightroomSettings() {
         TestContext context = new TestContext();
         context.lightroomAvailable();
-        when(context.configService.readInternalConfig()).thenReturn(Map.of("provider", "qwen2"));
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), any())).thenReturn(new AgentTuneResult(
-                "这张照片是夜景城市照片，画面偏暗，灯光层次可以作为主要表现点。",
+        context.qwenSelected();
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+                "这张照片是夜景城市照片，灯光层次可以作为主要表现点。",
                 Map.of(),
                 List.of(),
-                Map.of("intent", "分析照片", "photoType", "夜景城市照片", "recommendedStyle", "保留当前参数，先说明可调方向"),
+                Map.of("intent", "分析照片", "photoType", "夜景城市照片", "recommendedStyle", "先说明可调方向"),
                 "{\"assistantMessage\":\"这张照片是夜景城市照片\"}"
         ));
 
@@ -72,13 +72,13 @@ class RuntimeAgentOrchestratorTest {
     void explicitEditingRequestAppliesLightroomSettingsAutonomously() {
         TestContext context = new TestContext();
         context.lightroomAvailable();
-        when(context.configService.readInternalConfig()).thenReturn(Map.of("provider", "qwen2"));
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), any())).thenReturn(new AgentTuneResult(
+        context.qwenSelected();
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
                 "我会压一点高光、提亮暗部，并增强夜景电影感。",
                 Map.of("Exposure2012", 0.2),
                 List.of(new AgentDelta("basic", "Exposure2012", "曝光", 0, 0.2, 0.2, "提亮画面")),
                 Map.of("intent", "修成夜景电影感", "photoType", "夜景", "recommendedStyle", "夜景电影感"),
-                "{\"assistantMessage\":\"我会压一点高光、提亮暗部\"}"
+                "{\"assistantMessage\":\"我会压一点高光\"}"
         ));
         when(context.toolService.applyDevelopSettings(anyMap())).thenReturn(Map.of(
                 "success", true,
@@ -100,10 +100,66 @@ class RuntimeAgentOrchestratorTest {
         verify(context.toolService).applyDevelopSettings(Map.of("Exposure2012", 0.2));
     }
 
+    @Test
+    void localAdjustmentPlansAreReturnedButNotSubmittedAsGlobalDevelopSettings() {
+        TestContext context = new TestContext();
+        context.lightroomAvailable();
+        context.qwenSelected();
+        Map<String, Object> skyPlan = Map.of(
+                "type", "linear_gradient",
+                "target", "天空",
+                "coordinateSpace", "normalized_crop",
+                "region", Map.of("x", 0.0, "y", 0.0, "w", 1.0, "h", 0.42),
+                "settings", Map.of("Exposure2012", -0.25, "Highlights2012", -18)
+        );
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+                "我会先整体提亮，再计划用线性渐变压暗天空；当前插件只会先执行全局参数。",
+                Map.of("Exposure2012", 0.12),
+                List.of(new AgentDelta("basic", "Exposure2012", "曝光", 0, 0.12, 0.12, "整体提亮")),
+                Map.of("intent", "夜景电影感", "photoType", "夜景城市照片", "recommendedStyle", "全局提亮，天空局部压暗"),
+                List.of(skyPlan),
+                "{\"localAdjustments\":[{\"target\":\"天空\"}]}"
+        ));
+        when(context.toolService.applyDevelopSettings(anyMap())).thenReturn(Map.of(
+                "success", true,
+                "pending", true,
+                "jobId", "agent-apply-local-1"
+        ));
+
+        Map<String, Object> result = context.orchestrator.chat(Map.of(
+                "message", "修成夜景电影感，天空压暗一点",
+                "provider", "qwen2",
+                "sessionId", "session-local"
+        ));
+
+        Map<String, Object> data = (Map<String, Object>) result.get("data");
+        assertThat((List<Map<String, Object>>) data.get("localAdjustments")).containsExactly(skyPlan);
+        assertThat((Map<String, Object>) data.get("capabilities")).containsEntry("supportsLocalMasks", false);
+        verify(context.toolService).applyDevelopSettings(Map.of("Exposure2012", 0.12));
+    }
+
+    @Test
+    void modelFailureReturnsUserVisibleMessageWithoutRuleFallback() {
+        TestContext context = new TestContext();
+        context.lightroomAvailable();
+        context.qwenSelected();
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap()))
+                .thenThrow(new IllegalStateException("模型配置不完整，请先填写 API Key。"));
+
+        Map<String, Object> result = context.orchestrator.chat(Map.of(
+                "message", "帮我修图",
+                "provider", "qwen2",
+                "sessionId", "session-model-error"
+        ));
+
+        assertThat(result).containsEntry("success", false);
+        assertThat(result.get("message")).isEqualTo("模型配置不完整，请先填写 API Key。");
+        verify(context.toolService, never()).applyDevelopSettings(anyMap());
+    }
+
     private static class TestContext {
         private final LightroomStateService stateService = mock(LightroomStateService.class);
         private final LightroomToolService toolService = mock(LightroomToolService.class);
-        private final RuleBasedRuntimeAgent ruleAgent = mock(RuleBasedRuntimeAgent.class);
         private final ModelRuntimeAgent modelAgent = mock(ModelRuntimeAgent.class);
         private final RuntimeConfigService configService = mock(RuntimeConfigService.class);
         private final AdminRuntimeClient adminRuntimeClient = mock(AdminRuntimeClient.class);
@@ -113,7 +169,6 @@ class RuntimeAgentOrchestratorTest {
         TestContext() {
             ReflectionTestUtils.setField(orchestrator, "stateService", stateService);
             ReflectionTestUtils.setField(orchestrator, "toolService", toolService);
-            ReflectionTestUtils.setField(orchestrator, "ruleAgent", ruleAgent);
             ReflectionTestUtils.setField(orchestrator, "modelAgent", modelAgent);
             ReflectionTestUtils.setField(orchestrator, "configService", configService);
             ReflectionTestUtils.setField(orchestrator, "adminRuntimeClient", adminRuntimeClient);
@@ -126,6 +181,13 @@ class RuntimeAgentOrchestratorTest {
                     "available", true,
                     "photo", Map.of("fileName", "DSCF0001.RAF"),
                     "currentAdjustment", Map.of()
+            ));
+        }
+
+        void qwenSelected() {
+            when(configService.readInternalConfig()).thenReturn(Map.of(
+                    "provider", "qwen2",
+                    "qwen2", Map.of("baseUrl", "https://dashscope.aliyuncs.com/compatible-mode/v1", "model", "qwen-plus", "apiKey", "test")
             ));
         }
     }

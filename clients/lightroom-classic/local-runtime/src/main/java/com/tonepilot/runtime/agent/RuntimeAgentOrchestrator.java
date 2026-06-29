@@ -22,9 +22,6 @@ public class RuntimeAgentOrchestrator {
     private LightroomToolService toolService;
 
     @Autowired
-    private RuleBasedRuntimeAgent ruleAgent;
-
-    @Autowired
     private ModelRuntimeAgent modelAgent;
 
     @Autowired
@@ -70,19 +67,24 @@ public class RuntimeAgentOrchestrator {
                 ? (Map<String, Object>) map
                 : Map.of();
         Map<String, Object> runtimeConfig = configService.readInternalConfig();
-        String provider = String.valueOf(payload.getOrDefault("provider", runtimeConfig.getOrDefault("provider", "rule")));
+        String provider = String.valueOf(payload.getOrDefault("provider", runtimeConfig.getOrDefault("provider", "qwen2")));
         traceLogger.info("agent.provider.selected", sessionId, Map.of("provider", provider));
 
         AgentInput agentInput = new AgentInput(message, currentAdjustment);
-        AgentTuneResult tuneResult = modelAgent.plan(
-                agentInput,
-                provider,
-                runtimeConfig,
-                () -> ruleAgent.plan(agentInput)
-        );
+        AgentTuneResult tuneResult;
+        try {
+            tuneResult = modelAgent.plan(agentInput, provider, runtimeConfig);
+        } catch (Exception exception) {
+            traceLogger.warn("agent.model.failed", sessionId, Map.of(
+                    "provider", provider,
+                    "error", exception.getMessage()
+            ));
+            return Map.of("success", false, "message", exception.getMessage());
+        }
         traceLogger.info("agent.intent.analyzed", sessionId, Map.of(
                 "deltaCount", tuneResult.deltas().size(),
                 "settingCount", tuneResult.developSettings().size(),
+                "localAdjustmentCount", tuneResult.localAdjustments().size(),
                 "analysis", tuneResult.analysis()
         ));
 
@@ -145,6 +147,13 @@ public class RuntimeAgentOrchestrator {
         data.put("assistantMessage", tuneResult.assistantMessage());
         data.put("deltas", tuneResult.deltas());
         data.put("developSettings", tuneResult.developSettings());
+        data.put("localAdjustments", tuneResult.localAdjustments());
+        data.put("capabilities", Map.of(
+                "supportsGlobalDevelopSettings", true,
+                "supportsLocalMasks", false,
+                "localMaskMode", "plan_only",
+                "message", "当前 Lightroom 插件只会真实执行全局 Develop Settings；局部蒙版先作为 Agent 计划展示。"
+        ));
         data.put("modelRawContent", tuneResult.rawModelContent());
         return data;
     }

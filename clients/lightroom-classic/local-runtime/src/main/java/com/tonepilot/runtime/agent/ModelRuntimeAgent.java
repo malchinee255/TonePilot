@@ -16,7 +16,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
 @Component
 public class ModelRuntimeAgent {
@@ -25,9 +24,6 @@ public class ModelRuntimeAgent {
 
     @Autowired
     private ObjectMapper objectMapper = new ObjectMapper();
-
-    @Autowired
-    private RuleBasedRuntimeAgent ruleAgent = new RuleBasedRuntimeAgent();
 
     @Autowired
     private RuntimeTraceLogger traceLogger;
@@ -40,17 +36,15 @@ public class ModelRuntimeAgent {
     public AgentTuneResult plan(
             AgentInput input,
             String provider,
-            Map<String, Object> runtimeConfig,
-            Supplier<AgentTuneResult> fallback
+            Map<String, Object> runtimeConfig
     ) {
-        if (provider == null || provider.equals("rule")) {
-            traceLogger.info("model.provider.rule", "", Map.of("reason", "provider_rule"));
-            return fallback.get();
+        if (provider == null || provider.isBlank() || "rule".equals(provider)) {
+            throw new IllegalStateException("请先选择 OpenAI 或阿里 Qwen2 模型，本地规则模式已移除。");
         }
         ProviderConfig config = providerConfig(provider, runtimeConfig);
         if (!config.ready()) {
             traceLogger.warn("model.provider.not_ready", "", Map.of("provider", provider));
-            return fallback.get();
+            throw new IllegalStateException("模型配置不完整，请在左侧“模型设置”中填写 Base URL、模型名称和 API Key。");
         }
         try {
             traceLogger.info("model.request.sending", "", Map.of(
@@ -84,23 +78,25 @@ public class ModelRuntimeAgent {
                         "provider", provider,
                         "statusCode", response.statusCode()
                 ));
-                return fallback.get();
+                throw new IllegalStateException("模型调用失败，HTTP 状态码：" + response.statusCode());
             }
-            return parseModelResult(input, response.body(), fallback);
+            return parseModelResult(input, response.body());
         } catch (Exception exception) {
-            log.debug("{} 模型调用失败，回退本地规则：{}", provider, exception.getMessage());
+            log.debug("{} 模型调用失败：{}", provider, exception.getMessage());
             traceLogger.warn("model.request.failed", "", Map.of(
                     "provider", provider,
                     "error", exception.getMessage()
             ));
-            return fallback.get();
+            if (exception instanceof IllegalStateException illegalStateException) {
+                throw illegalStateException;
+            }
+            throw new IllegalStateException("模型调用失败：" + exception.getMessage(), exception);
         }
     }
 
     private AgentTuneResult parseModelResult(
             AgentInput input,
-            String responseBody,
-            Supplier<AgentTuneResult> fallback
+            String responseBody
     ) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
@@ -111,23 +107,31 @@ public class ModelRuntimeAgent {
                     new TypeReference<Map<String, Object>>() {
                     }
             );
-            AgentTuneResult ruleShape = ruleAgent.plan(new AgentInput(input.message(), input.currentSettings()));
+            List<Map<String, Object>> localAdjustments = json.has("localAdjustments")
+                    ? objectMapper.convertValue(json.path("localAdjustments"), new TypeReference<>() {
+                    })
+                    : List.of();
             Map<String, Object> analysis = json.has("analysis")
                     ? objectMapper.convertValue(json.path("analysis"), new TypeReference<>() {
                     })
-                    : ruleShape.analysis();
+                    : Map.of("intent", input.message(), "photoType", "当前 Lightroom 照片", "recommendedStyle", "由模型分析生成");
             if (developSettings == null || developSettings.isEmpty()) {
-                traceLogger.info("model.parse.analysis_only", "", Map.of("hasAnalysis", json.has("analysis")));
+                traceLogger.info("model.parse.analysis_only", "", Map.of(
+                        "hasAnalysis", json.has("analysis"),
+                        "localAdjustmentCount", localAdjustments.size()
+                ));
                 return new AgentTuneResult(
-                        json.path("assistantMessage").asText("我已经完成照片分析，本轮不需要修改 Lightroom 参数。"),
+                        json.path("assistantMessage").asText("我已经完成照片分析，本轮不需要修改 Lightroom 全局参数。"),
                         Map.of(),
                         List.of(),
                         analysis,
+                        localAdjustments,
                         content
                 );
             }
             traceLogger.info("model.parse.succeeded", "", Map.of(
                     "settingCount", developSettings.size(),
+                    "localAdjustmentCount", localAdjustments.size(),
                     "hasAnalysis", json.has("analysis")
             ));
             return new AgentTuneResult(
@@ -135,12 +139,13 @@ public class ModelRuntimeAgent {
                     developSettings,
                     buildDeltas(input.currentSettings(), developSettings),
                     analysis,
+                    localAdjustments,
                     content
             );
         } catch (Exception exception) {
-            log.debug("模型响应解析失败，回退本地规则：{}", exception.getMessage());
+            log.debug("模型响应解析失败：{}", exception.getMessage());
             traceLogger.warn("model.parse.failed", "", Map.of("error", exception.getMessage()));
-            return fallback.get();
+            throw new IllegalStateException("模型响应解析失败：" + exception.getMessage(), exception);
         }
     }
 
@@ -162,13 +167,26 @@ public class ModelRuntimeAgent {
         return """
                 你是 TonePilot 的 Lightroom 调色 Agent。
                 只允许输出严格 JSON，不要输出 Markdown。
-                只输出本轮需要修改的 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
+                developSettings 只输出本轮需要真实应用的全局 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
                 如果用户只要求分析而不要求修图，则 developSettings 输出空对象。
+                localAdjustments 用来描述局部蒙版计划，当前只作为计划展示，不会直接写入 Lightroom 蒙版。
+                localAdjustments 的 region 必须使用 normalized_crop 坐标，x/y/w/h/centerX/centerY/radius 都在 0 到 1 之间。
                 JSON 结构：
                 {
                   "assistantMessage": "中文解释",
                   "analysis": {"intent":"", "photoType":"", "recommendedStyle":""},
-                  "developSettings": {"Exposure2012": 0.2}
+                  "developSettings": {"Exposure2012": 0.2},
+                  "localAdjustments": [
+                    {
+                      "type": "linear_gradient|radial_gradient|brush|ai_subject|ai_sky",
+                      "target": "天空",
+                      "coordinateSpace": "normalized_crop",
+                      "region": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.42},
+                      "feather": 0.65,
+                      "settings": {"Exposure2012": -0.25, "Highlights2012": -18},
+                      "reason": "压暗天空并保留城市灯光层次"
+                    }
+                  ]
                 }
                 """;
     }
