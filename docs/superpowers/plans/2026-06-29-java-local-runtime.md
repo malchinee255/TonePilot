@@ -150,7 +150,7 @@ Expected: PASS.
 ```java
 @Test
 void adminSyncFailureDoesNotBreakLocalEditing() {
-    AdminRuntimeClient client = AdminRuntimeClient.disabled();
+    AdminRuntimeClient client = new AdminRuntimeClient();
     assertThatCode(() -> client.recordEvent("session.message", "session-1", Map.of("message", "test")))
             .doesNotThrowAnyException();
 }

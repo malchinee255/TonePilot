@@ -34,12 +34,6 @@ public class ModelRuntimeAgent {
     public ModelRuntimeAgent() {
     }
 
-    ModelRuntimeAgent(ObjectMapper objectMapper, RuleBasedRuntimeAgent ruleAgent, HttpClient httpClient) {
-        this.objectMapper = objectMapper;
-        this.ruleAgent = ruleAgent;
-        this.httpClient = httpClient;
-    }
-
     public AgentTuneResult plan(
             AgentInput input,
             String provider,

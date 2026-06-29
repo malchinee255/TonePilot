@@ -30,16 +30,6 @@ public class AdminRuntimeClient {
     public AdminRuntimeClient() {
     }
 
-    AdminRuntimeClient(RuntimeProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
-        this.properties = properties;
-        this.objectMapper = objectMapper;
-        this.httpClient = httpClient;
-    }
-
-    public static AdminRuntimeClient disabled() {
-        return new AdminRuntimeClient(new RuntimeProperties(), new ObjectMapper(), HttpClient.newHttpClient());
-    }
-
     public void recordEvent(String eventType, String sessionId, Map<String, Object> payload) {
         if (properties.getAdmin().getBaseUrl() == null || properties.getAdmin().getBaseUrl().isBlank()) {
             return;

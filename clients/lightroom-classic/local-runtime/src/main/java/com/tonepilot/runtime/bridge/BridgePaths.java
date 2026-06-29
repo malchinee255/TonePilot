@@ -40,10 +40,6 @@ public class BridgePaths {
         return fsRoot;
     }
 
-    public String lightroomRoot() {
-        return lightroomRoot;
-    }
-
     private boolean usesWindowsSeparator(String value) {
         return value.matches("^[a-zA-Z]:[\\\\/].*") || value.contains("\\");
     }

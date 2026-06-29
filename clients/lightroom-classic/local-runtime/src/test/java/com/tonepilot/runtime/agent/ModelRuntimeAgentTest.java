@@ -1,9 +1,7 @@
 package com.tonepilot.runtime.agent;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
-import java.net.http.HttpClient;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,7 +11,7 @@ class ModelRuntimeAgentTest {
     @Test
     void fallsBackToRuleAgentWhenProviderConfigIsMissing() {
         RuleBasedRuntimeAgent ruleAgent = new RuleBasedRuntimeAgent();
-        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent(new ObjectMapper(), ruleAgent, HttpClient.newHttpClient());
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
 
         AgentTuneResult result = modelAgent.plan(
                 new AgentInput("夜景电影感，再亮一点", Map.of("Temperature", 4200)),
