@@ -8,7 +8,8 @@ logs/
 tonepilot-admin/backend/data/
 .DS_Store
 *.log
-storage/
+/storage/
+tonepilot-admin/backend/storage/
 uploads/
 .env
 .env.local
