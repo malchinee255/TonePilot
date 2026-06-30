@@ -1,0 +1,227 @@
+package com.tonepilot.application.knowledge;
+
+import com.tonepilot.application.agent.*;
+import com.tonepilot.application.agent.workflow.*;
+import com.tonepilot.application.agent.workflow.node.*;
+import com.tonepilot.application.evaluation.*;
+import com.tonepilot.application.knowledge.*;
+import com.tonepilot.application.observability.*;
+import com.tonepilot.application.photo.*;
+import com.tonepilot.application.runtime.*;
+import com.tonepilot.application.style.*;
+import com.tonepilot.common.*;
+import com.tonepilot.domain.agent.*;
+import com.tonepilot.domain.colorgrading.*;
+import com.tonepilot.domain.evaluation.*;
+import com.tonepilot.domain.knowledge.*;
+import com.tonepilot.domain.observability.*;
+import com.tonepilot.domain.photo.*;
+import com.tonepilot.domain.runtime.*;
+import com.tonepilot.domain.storage.*;
+import com.tonepilot.domain.style.*;
+import com.tonepilot.infrastructure.agent.*;
+import com.tonepilot.infrastructure.ai.*;
+import com.tonepilot.infrastructure.ai.dto.*;
+import com.tonepilot.infrastructure.knowledge.douyin.*;
+import com.tonepilot.infrastructure.knowledge.rag.*;
+import com.tonepilot.infrastructure.knowledge.rag.config.*;
+import com.tonepilot.infrastructure.observability.config.*;
+import com.tonepilot.infrastructure.observability.repository.*;
+import com.tonepilot.infrastructure.runtime.repository.*;
+import com.tonepilot.infrastructure.shared.config.*;
+import com.tonepilot.infrastructure.shared.persistence.*;
+import com.tonepilot.infrastructure.shared.security.*;
+import com.tonepilot.infrastructure.storage.*;
+import com.tonepilot.infrastructure.storage.config.*;
+import com.tonepilot.repository.observability.*;
+import com.tonepilot.repository.runtime.*;
+import com.tonepilot.server.dto.*;
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.tonepilot.domain.agent.KnowledgeGenerationAgent;
+import com.tonepilot.infrastructure.ai.AiProviderContext;
+import com.tonepilot.common.NotFoundException;
+import com.tonepilot.domain.style.ColorStyle;
+import com.tonepilot.domain.knowledge.StyleKnowledge;
+import com.tonepilot.domain.style.StyleSample;
+import com.tonepilot.infrastructure.shared.persistence.InMemoryTonePilotStore;
+import com.tonepilot.server.dto.StyleKnowledgeRequest;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class StyleKnowledgeService {
+
+    private final InMemoryTonePilotStore store;
+    private final StyleService styleService;
+    private final StyleSampleService styleSampleService;
+    private final KnowledgeGenerationAgent knowledgeGenerationAgent;
+    private final KnowledgeVectorIndexService knowledgeVectorIndexService;
+
+    @Autowired
+    public StyleKnowledgeService(
+            InMemoryTonePilotStore store,
+            StyleService styleService,
+            StyleSampleService styleSampleService,
+            KnowledgeGenerationAgent knowledgeGenerationAgent,
+            KnowledgeVectorIndexService knowledgeVectorIndexService
+    ) {
+        this.store = store;
+        this.styleService = styleService;
+        this.styleSampleService = styleSampleService;
+        this.knowledgeGenerationAgent = knowledgeGenerationAgent;
+        this.knowledgeVectorIndexService = knowledgeVectorIndexService;
+    }
+
+    public StyleKnowledge generateFromSample(Long sampleId) {
+        return generateFromSample(sampleId, null);
+    }
+
+    public StyleKnowledge generateFromSample(Long sampleId, String provider) {
+        StyleSample sample = styleSampleService.get(sampleId);
+        if (sample.analysisResult() == null) {
+            sample = styleSampleService.analyze(sampleId, provider);
+        }
+        StyleSample analyzedSample = sample;
+        ColorStyle style = styleService.get(analyzedSample.styleId());
+        StyleKnowledge draft = AiProviderContext.use(
+                provider,
+                () -> knowledgeGenerationAgent.generate(style, analyzedSample, analyzedSample.analysisResult())
+        );
+        StyleKnowledge saved = new StyleKnowledge(
+                store.styleKnowledgeIds.getAndIncrement(),
+                draft.styleId(),
+                draft.sampleId(),
+                draft.title(),
+                draft.scene(),
+                draft.targetStyle(),
+                draft.problems(),
+                draft.strategy(),
+                draft.paramRanges(),
+                draft.content(),
+                draft.embeddingId(),
+                draft.status(),
+                Instant.now(),
+                Instant.now()
+        );
+        store.styleKnowledge.put(saved.id(), saved);
+        return saved;
+    }
+
+    public List<StyleKnowledge> list(String status) {
+        return store.styleKnowledge.values()
+                .stream()
+                .filter(item -> status == null || status.isBlank() || item.status().equals(status))
+                .sorted(Comparator.comparing(StyleKnowledge::updatedAt).reversed())
+                .toList();
+    }
+
+    public StyleKnowledge get(Long id) {
+        StyleKnowledge knowledge = store.styleKnowledge.get(id);
+        if (knowledge == null) {
+            throw new NotFoundException("未找到风格知识：" + id);
+        }
+        return knowledge;
+    }
+
+    public StyleKnowledge update(Long id, StyleKnowledgeRequest request) {
+        StyleKnowledge existing = get(id);
+        StyleKnowledge updated = new StyleKnowledge(
+                existing.id(),
+                existing.styleId(),
+                existing.sampleId(),
+                valueOr(request.title(), existing.title()),
+                valueOr(request.scene(), existing.scene()),
+                valueOr(request.targetStyle(), existing.targetStyle()),
+                request.problems() == null ? existing.problems() : request.problems(),
+                request.strategy() == null ? existing.strategy() : request.strategy(),
+                request.paramRanges() == null ? existing.paramRanges() : request.paramRanges(),
+                valueOr(request.content(), existing.content()),
+                existing.embeddingId() == null ? "local-style-" + UUID.randomUUID() : existing.embeddingId(),
+                valueOr(request.status(), existing.status()),
+                existing.createdAt(),
+                Instant.now()
+        );
+        store.styleKnowledge.put(id, updated);
+        return updated;
+    }
+
+    public StyleKnowledge approve(Long id) {
+        StyleKnowledge approved = changeStatus(id, "approved");
+        knowledgeVectorIndexService.indexStyleKnowledge(approved);
+        return approved;
+    }
+
+    public StyleKnowledge reject(Long id) {
+        return changeStatus(id, "rejected");
+    }
+
+    public StyleKnowledge disable(Long id) {
+        return changeStatus(id, "disabled");
+    }
+
+    private StyleKnowledge changeStatus(Long id, String status) {
+        StyleKnowledge existing = get(id);
+        StyleKnowledge updated = new StyleKnowledge(
+                existing.id(),
+                existing.styleId(),
+                existing.sampleId(),
+                existing.title(),
+                existing.scene(),
+                existing.targetStyle(),
+                existing.problems(),
+                existing.strategy(),
+                existing.paramRanges(),
+                existing.content(),
+                existing.embeddingId(),
+                status,
+                existing.createdAt(),
+                Instant.now()
+        );
+        store.styleKnowledge.put(id, updated);
+        return updated;
+    }
+
+    public StyleKnowledge createDraftFromMaterial(
+            Long styleId,
+            String title,
+            String scene,
+            String targetStyle,
+            List<String> problems,
+            List<String> strategy,
+            Map<String, String> paramRanges,
+            String content
+    ) {
+        StyleKnowledge saved = new StyleKnowledge(
+                store.styleKnowledgeIds.getAndIncrement(),
+                styleId,
+                null,
+                valueOr(title, "导入素材生成的调色知识"),
+                valueOr(scene, "通用摄影场景"),
+                valueOr(targetStyle, "自然调色"),
+                problems == null ? List.of() : problems,
+                strategy == null ? List.of() : strategy,
+                paramRanges == null ? Map.of() : paramRanges,
+                valueOr(content, ""),
+                "material-style-" + UUID.randomUUID(),
+                "pending",
+                Instant.now(),
+                Instant.now()
+        );
+        store.styleKnowledge.put(saved.id(), saved);
+        return saved;
+    }
+
+    private String valueOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+}
+
+

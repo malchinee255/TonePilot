@@ -1,0 +1,211 @@
+package com.tonepilot.infrastructure.agent;
+
+import com.tonepilot.application.agent.*;
+import com.tonepilot.application.agent.workflow.*;
+import com.tonepilot.application.agent.workflow.node.*;
+import com.tonepilot.application.evaluation.*;
+import com.tonepilot.application.knowledge.*;
+import com.tonepilot.application.observability.*;
+import com.tonepilot.application.photo.*;
+import com.tonepilot.application.runtime.*;
+import com.tonepilot.application.style.*;
+import com.tonepilot.common.*;
+import com.tonepilot.domain.agent.*;
+import com.tonepilot.domain.colorgrading.*;
+import com.tonepilot.domain.evaluation.*;
+import com.tonepilot.domain.knowledge.*;
+import com.tonepilot.domain.observability.*;
+import com.tonepilot.domain.photo.*;
+import com.tonepilot.domain.runtime.*;
+import com.tonepilot.domain.storage.*;
+import com.tonepilot.domain.style.*;
+import com.tonepilot.infrastructure.agent.*;
+import com.tonepilot.infrastructure.ai.*;
+import com.tonepilot.infrastructure.ai.dto.*;
+import com.tonepilot.infrastructure.knowledge.douyin.*;
+import com.tonepilot.infrastructure.knowledge.rag.*;
+import com.tonepilot.infrastructure.knowledge.rag.config.*;
+import com.tonepilot.infrastructure.observability.config.*;
+import com.tonepilot.infrastructure.observability.repository.*;
+import com.tonepilot.infrastructure.runtime.repository.*;
+import com.tonepilot.infrastructure.shared.config.*;
+import com.tonepilot.infrastructure.shared.persistence.*;
+import com.tonepilot.infrastructure.shared.security.*;
+import com.tonepilot.infrastructure.storage.*;
+import com.tonepilot.infrastructure.storage.config.*;
+import com.tonepilot.repository.observability.*;
+import com.tonepilot.repository.runtime.*;
+import com.tonepilot.server.dto.*;
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.tonepilot.domain.colorgrading.ColorAdjustment;
+import com.tonepilot.domain.colorgrading.LightroomBasicParams;
+import com.tonepilot.domain.colorgrading.LightroomEffectsParams;
+import com.tonepilot.domain.colorgrading.LightroomHslParams;
+import com.tonepilot.domain.colorgrading.ParamRangeValidator;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+@Component
+public class RuleBasedParamValidationAgent implements ParamValidationAgent {
+
+    private final ParamRangeValidator rangeValidator;
+
+    @Autowired
+    public RuleBasedParamValidationAgent(ParamRangeValidator rangeValidator) {
+        this.rangeValidator = rangeValidator;
+    }
+
+    @Override
+    public ParamValidationResult validate(ColorAdjustment adjustment) {
+        ColorAdjustment normalized = normalizeMissingParts(adjustment);
+        List<String> messages = new ArrayList<>(rangeValidator.validate(normalized));
+        LightroomBasicParams basic = safeBasic(normalized.basic());
+        LightroomHslParams hsl = safeHsl(normalized.hsl());
+        LightroomEffectsParams effects = safeEffects(normalized.effects());
+
+        boolean corrected = !Objects.equals(basic, normalized.basic())
+                || !Objects.equals(hsl, normalized.hsl())
+                || !Objects.equals(effects, normalized.effects());
+        if (corrected) {
+            messages.add("已自动将越界参数收敛到安全范围");
+        }
+
+        Map<String, Object> rawResponse = new LinkedHashMap<>();
+        if (normalized.rawResponse() != null) {
+            rawResponse.putAll(normalized.rawResponse());
+        }
+        rawResponse.put("validationMessages", messages);
+        rawResponse.put("validationCorrected", corrected);
+
+        ColorAdjustment safeAdjustment = new ColorAdjustment(
+                normalized.id(),
+                normalized.photoId(),
+                normalized.style(),
+                normalized.reason(),
+                basic,
+                hsl,
+                effects,
+                normalized.extended(),
+                normalized.steps() == null ? List.of() : normalized.steps(),
+                rawResponse,
+                normalized.createdAt() == null ? Instant.now() : normalized.createdAt()
+        );
+        return new ParamValidationResult(safeAdjustment, messages, corrected);
+    }
+
+    private ColorAdjustment normalizeMissingParts(ColorAdjustment adjustment) {
+        if (adjustment.basic() != null && adjustment.hsl() != null && adjustment.effects() != null) {
+            return adjustment;
+        }
+        return new ColorAdjustment(
+                adjustment.id(),
+                adjustment.photoId(),
+                adjustment.style(),
+                adjustment.reason(),
+                adjustment.basic() == null ? defaultBasic() : adjustment.basic(),
+                adjustment.hsl() == null ? defaultHsl() : adjustment.hsl(),
+                adjustment.effects() == null ? new LightroomEffectsParams(0, 0) : adjustment.effects(),
+                adjustment.extended(),
+                adjustment.steps(),
+                adjustment.rawResponse(),
+                adjustment.createdAt()
+        );
+    }
+
+    private LightroomBasicParams safeBasic(LightroomBasicParams value) {
+        return new LightroomBasicParams(
+                clamp(value.exposure(), -1.5, 1.5),
+                clamp(value.contrast(), -100, 100),
+                clamp(value.highlights(), -100, 100),
+                clamp(value.shadows(), -100, 100),
+                clamp(value.whites(), -100, 100),
+                clamp(value.blacks(), -100, 100),
+                clampTemperature(value.temperature()),
+                clamp(value.tint(), -50, 50),
+                clamp(value.texture(), -100, 100),
+                clamp(value.clarity(), -100, 100),
+                clamp(value.dehaze(), -100, 100),
+                clamp(value.vibrance(), -100, 100),
+                clamp(value.saturation(), -100, 100)
+        );
+    }
+
+    private LightroomHslParams safeHsl(LightroomHslParams value) {
+        return new LightroomHslParams(
+                clamp(value.redHue(), -100, 100),
+                clamp(value.redSaturation(), -100, 100),
+                clamp(value.redLuminance(), -100, 100),
+                clamp(value.orangeHue(), -100, 100),
+                clamp(value.orangeSaturation(), -100, 100),
+                clamp(value.orangeLuminance(), -100, 100),
+                clamp(value.yellowHue(), -100, 100),
+                clamp(value.yellowSaturation(), -100, 100),
+                clamp(value.yellowLuminance(), -100, 100),
+                clamp(value.greenHue(), -100, 100),
+                clamp(value.greenSaturation(), -100, 100),
+                clamp(value.greenLuminance(), -100, 100),
+                clamp(value.aquaHue(), -100, 100),
+                clamp(value.aquaSaturation(), -100, 100),
+                clamp(value.aquaLuminance(), -100, 100),
+                clamp(value.blueHue(), -100, 100),
+                clamp(value.blueSaturation(), -100, 100),
+                clamp(value.blueLuminance(), -100, 100),
+                clamp(value.purpleHue(), -100, 100),
+                clamp(value.purpleSaturation(), -100, 100),
+                clamp(value.purpleLuminance(), -100, 100),
+                clamp(value.magentaHue(), -100, 100),
+                clamp(value.magentaSaturation(), -100, 100),
+                clamp(value.magentaLuminance(), -100, 100)
+        );
+    }
+
+    private LightroomEffectsParams safeEffects(LightroomEffectsParams value) {
+        return new LightroomEffectsParams(
+                clamp(value.grain(), 0, 100),
+                clamp(value.vignette(), -100, 100)
+        );
+    }
+
+    private LightroomBasicParams defaultBasic() {
+        return new LightroomBasicParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    private LightroomHslParams defaultHsl() {
+        return new LightroomHslParams(
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0
+        );
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private int clampTemperature(int value) {
+        if (Math.abs(value) >= 1000) {
+            return clamp(value, 2000, 50000);
+        }
+        return clamp(value, -50, 50);
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+}
+
+

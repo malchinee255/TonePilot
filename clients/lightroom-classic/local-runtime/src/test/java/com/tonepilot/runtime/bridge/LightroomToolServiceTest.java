@@ -1,6 +1,20 @@
 package com.tonepilot.runtime.bridge;
 
-import com.tonepilot.runtime.observability.RuntimeTraceLogger;
+import com.tonepilot.runtime.application.agent.*;
+import com.tonepilot.runtime.application.config.*;
+import com.tonepilot.runtime.application.lightroom.*;
+import com.tonepilot.runtime.domain.agent.*;
+import com.tonepilot.runtime.infrastructure.admin.*;
+import com.tonepilot.runtime.infrastructure.config.*;
+import com.tonepilot.runtime.infrastructure.lightroom.filesystem.*;
+import com.tonepilot.runtime.infrastructure.lightroom.repository.*;
+import com.tonepilot.runtime.infrastructure.model.*;
+import com.tonepilot.runtime.infrastructure.observability.*;
+import com.tonepilot.runtime.repository.lightroom.*;
+import com.tonepilot.runtime.server.*;
+
+
+import com.tonepilot.runtime.infrastructure.observability.RuntimeTraceLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -11,7 +25,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class LightroomToolServiceTest {
 
@@ -20,14 +33,15 @@ class LightroomToolServiceTest {
 
     @Test
     void writesApplyJobAsExecutableLuaChunk() throws Exception {
-        LightroomStateService stateService = mock(LightroomStateService.class);
-        when(stateService.bridgePaths()).thenReturn(new BridgePaths(tempDir, tempDir.toString()));
+        RuntimeProperties properties = new RuntimeProperties();
+        properties.getBridge().setRoot(tempDir.toString());
+        properties.getBridge().setLightroomRoot(tempDir.toString());
 
-        LightroomToolService service = new LightroomToolService();
-        ReflectionTestUtils.setField(service, "stateService", stateService);
-        ReflectionTestUtils.setField(service, "traceLogger", mock(RuntimeTraceLogger.class));
+        FileLightroomToolRepository repository = new FileLightroomToolRepository();
+        ReflectionTestUtils.setField(repository, "properties", properties);
+        ReflectionTestUtils.setField(repository, "traceLogger", mock(RuntimeTraceLogger.class));
 
-        service.applyDevelopSettings(Map.of("Exposure2012", 0.2));
+        repository.applyDevelopSettings(Map.of("Exposure2012", 0.2));
 
         Path job = Files.list(tempDir.resolve("apply-jobs"))
                 .filter(path -> path.getFileName().toString().endsWith(".lua"))
