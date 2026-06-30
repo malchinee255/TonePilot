@@ -106,4 +106,66 @@ class RuntimeIngestServiceTest {
 
         assertThat(service.listEvents(response.userId())).hasSize(1);
     }
+    @Test
+    void filtersRuntimeEventsBySessionTraceTypeAndLimit() {
+        RuntimeDeviceRegistrationResponse response = service.registerDevice(
+                new RuntimeDeviceRegistrationRequest(
+                        "fingerprint-query",
+                        "TonePilot Local Runtime",
+                        "127.0.0.1",
+                        Map.of("os", "Windows")
+                )
+        );
+
+        service.recordEvent(new RuntimeEventRequest(
+                response.userId(),
+                response.deviceId(),
+                "llm.response",
+                "session-query",
+                Map.of("traceId", "trace-query", "answer", "提高暗部并保留高光")
+        ));
+        service.recordEvent(new RuntimeEventRequest(
+                response.userId(),
+                response.deviceId(),
+                "tool.lightroom.apply.result",
+                "session-other",
+                Map.of("traceId", "trace-other", "success", true)
+        ));
+
+        RuntimeEventQuery query = new RuntimeEventQuery(
+                response.userId(),
+                "session-query",
+                "trace-query",
+                "llm.response",
+                10
+        );
+
+        assertThat(service.listEvents(query))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.eventType()).isEqualTo("llm.response");
+                    assertThat(event.sessionId()).isEqualTo("session-query");
+                    assertThat(event.payloadJson()).contains("提高暗部");
+                });
+    }
+
+    @Test
+    void listsRegisteredRuntimeDevicesByLastSeenTime() {
+        RuntimeDeviceRegistrationResponse response = service.registerDevice(
+                new RuntimeDeviceRegistrationRequest(
+                        "fingerprint-device-list",
+                        "TonePilot Local Runtime",
+                        "127.0.0.1",
+                        Map.of("os", "Windows")
+                )
+        );
+
+        assertThat(service.listDevices())
+                .anySatisfy(device -> {
+                    assertThat(device.userId()).isEqualTo(response.userId());
+                    assertThat(device.deviceId()).isEqualTo(response.deviceId());
+                    assertThat(device.fingerprint()).isEqualTo("fingerprint-device-list");
+                });
+    }
+
 }

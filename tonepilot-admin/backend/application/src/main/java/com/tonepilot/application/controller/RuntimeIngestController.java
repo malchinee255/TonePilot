@@ -81,8 +81,21 @@ public class RuntimeIngestController {
         return ApiResponse.ok(runtimeIngestService.recordEvent(request));
     }
 
+    @GetMapping("/devices")
+    public ApiResponse<List<RuntimeDeviceRecord>> listDevices() {
+        return ApiResponse.ok(runtimeIngestService.listDevices());
+    }
+
     @GetMapping("/events")
-    public ApiResponse<List<RuntimeEventRecord>> listEvents(@RequestParam String userId) {
-        return ApiResponse.ok(runtimeIngestService.listEvents(userId));
+    public ApiResponse<List<RuntimeEventRecord>> listEvents(
+            @RequestParam String userId,
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false, defaultValue = "100") Integer limit
+    ) {
+        return ApiResponse.ok(runtimeIngestService.listEvents(
+                new RuntimeEventQuery(userId, sessionId, traceId, eventType, limit)
+        ));
     }
 }

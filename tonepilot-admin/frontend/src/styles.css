@@ -224,3 +224,51 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+.observability-grid {
+  grid-template-columns: minmax(680px, 1.35fr) minmax(460px, 0.85fr);
+}
+
+.runtime-panel {
+  min-height: 760px;
+}
+
+.runtime-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(150px, 0.9fr) minmax(150px, 0.9fr) minmax(160px, 0.9fr) auto;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.runtime-detail {
+  margin-top: 14px;
+  border: 1px solid #343434;
+  border-radius: 6px;
+  background: #1d1d1d;
+}
+
+.detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #343434;
+  color: #f0f0f0;
+  font-weight: 700;
+}
+
+.runtime-detail pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  color: #cfd6dc;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.panel-title.compact {
+  margin-top: 8px;
+}

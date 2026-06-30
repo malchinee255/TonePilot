@@ -28,6 +28,9 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class RuntimeTraceLoggerTest {
 
@@ -52,6 +55,23 @@ class RuntimeTraceLoggerTest {
         assertThat(String.valueOf(event.get("timestamp"))).contains("+08:00");
         assertThat(OffsetDateTime.parse(String.valueOf(event.get("timestamp")))).isNotNull();
         assertThat((Map<String, Object>) event.get("details")).containsEntry("provider", "qwen2");
+    }
+
+    @Test
+    void forwardsStructuredTraceEventToAdminRuntimeClient() {
+        RuntimeTraceLogger logger = new RuntimeTraceLogger();
+        TraceContextManager traceContextManager = new TraceContextManager();
+        AdminRuntimeClient adminRuntimeClient = mock(AdminRuntimeClient.class);
+        ReflectionTestUtils.setField(logger, "traceContextManager", traceContextManager);
+        ReflectionTestUtils.setField(logger, "adminRuntimeClient", adminRuntimeClient);
+
+        logger.info("model.response.received", "session-1", Map.of("answer", "模型回答"));
+
+        verify(adminRuntimeClient).recordEvent(eq("model.response.received"), eq("session-1"), org.mockito.ArgumentMatchers.argThat(event ->
+                event.containsKey("traceId")
+                        && "model.response.received".equals(event.get("step"))
+                        && ((Map<?, ?>) event.get("details")).containsValue("模型回答")
+        ));
     }
 
     @Test

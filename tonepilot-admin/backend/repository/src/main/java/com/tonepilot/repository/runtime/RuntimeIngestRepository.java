@@ -30,7 +30,11 @@ public interface RuntimeIngestRepository {
 
     RuntimeDeviceRegistrationResponse registerDevice(RuntimeDeviceRegistrationRequest request);
 
+    List<RuntimeDeviceRecord> listDevices();
+
     RuntimeEventRecord recordEvent(RuntimeEventRequest request);
 
     List<RuntimeEventRecord> listEvents(String userId);
+
+    List<RuntimeEventRecord> listEvents(RuntimeEventQuery query);
 }

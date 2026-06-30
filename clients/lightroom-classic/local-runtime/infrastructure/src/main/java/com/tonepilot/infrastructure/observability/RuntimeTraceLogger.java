@@ -37,6 +37,9 @@ public class RuntimeTraceLogger {
     @Autowired
     private TraceContextManager traceContextManager;
 
+    @Autowired(required = false)
+    private AdminRuntimeClient adminRuntimeClient;
+
     public void info(String step, String sessionId, Map<String, Object> details) {
         write(Level.INFO, step, sessionId, details);
     }
@@ -52,6 +55,9 @@ public class RuntimeTraceLogger {
     private void write(Level level, String step, String sessionId, Map<String, Object> details) {
         Map<String, Object> event = buildEvent(level.name(), step, sessionId, details);
         TRACE_LOG.log(level, new ObjectMessage(event));
+        if (adminRuntimeClient != null) {
+            adminRuntimeClient.recordEvent(normalize(step), normalize(sessionId), event);
+        }
     }
 
     public Map<String, Object> buildEvent(String level, String step, String sessionId, Map<String, Object> details) {

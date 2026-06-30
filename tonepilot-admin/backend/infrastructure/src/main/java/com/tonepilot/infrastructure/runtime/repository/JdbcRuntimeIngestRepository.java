@@ -52,6 +52,7 @@ import java.util.UUID;
 public class JdbcRuntimeIngestRepository implements RuntimeIngestRepository {
 
     private final List<RuntimeEventRecord> localEvents = new ArrayList<>();
+    private final List<RuntimeDeviceRecord> localDevices = new ArrayList<>();
 
     @Autowired
     private PersistenceProperties persistenceProperties;
@@ -68,6 +69,18 @@ public class JdbcRuntimeIngestRepository implements RuntimeIngestRepository {
         if (!persistenceProperties.isEnabled() || jdbcTemplate == null) {
             String userId = "local-user-" + stableId(fingerprint);
             String deviceId = "local-device-" + stableId(fingerprint);
+            Instant now = Instant.now();
+            localDevices.removeIf(device -> device.fingerprint().equals(fingerprint));
+            localDevices.add(0, new RuntimeDeviceRecord(
+                    userId,
+                    deviceId,
+                    fingerprint,
+                    defaultText(request.deviceName(), "TonePilot Local Runtime"),
+                    defaultText(request.endpoint(), ""),
+                    toJson(request.metadata()),
+                    now,
+                    now
+            ));
             return new RuntimeDeviceRegistrationResponse(userId, deviceId, true);
         }
 
@@ -117,6 +130,30 @@ public class JdbcRuntimeIngestRepository implements RuntimeIngestRepository {
                 Timestamp.from(now)
         );
         return new RuntimeDeviceRegistrationResponse(userId, deviceId, true);
+    }
+
+    public synchronized List<RuntimeDeviceRecord> listDevices() {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
+        if (persistenceProperties.isEnabled() && jdbcTemplate != null) {
+            return jdbcTemplate.query("""
+                            SELECT user_id, id, fingerprint, device_name, endpoint, metadata_json, last_seen_at, created_at
+                            FROM runtime_device
+                            ORDER BY last_seen_at DESC
+                            LIMIT 100
+                            """,
+                    (rs, rowNum) -> new RuntimeDeviceRecord(
+                            rs.getString("user_id"),
+                            rs.getString("id"),
+                            rs.getString("fingerprint"),
+                            rs.getString("device_name"),
+                            rs.getString("endpoint"),
+                            rs.getString("metadata_json"),
+                            rs.getTimestamp("last_seen_at").toInstant(),
+                            rs.getTimestamp("created_at").toInstant()
+                    )
+            );
+        }
+        return localDevices.stream().limit(100).toList();
     }
 
     public synchronized RuntimeEventRecord recordEvent(RuntimeEventRequest request) {
@@ -179,6 +216,55 @@ public class JdbcRuntimeIngestRepository implements RuntimeIngestRepository {
                 .toList();
     }
 
+
+    public synchronized List<RuntimeEventRecord> listEvents(RuntimeEventQuery query) {
+        String userId = required(query.userId(), "userId");
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
+        if (persistenceProperties.isEnabled() && jdbcTemplate != null) {
+            StringBuilder sql = new StringBuilder("""
+                            SELECT id, user_id, device_id, event_type, session_id, payload_json, created_at
+                            FROM runtime_event
+                            WHERE user_id = ?
+                            """);
+            List<Object> args = new ArrayList<>();
+            args.add(userId);
+            if (!isBlank(query.sessionId())) {
+                sql.append(" AND session_id = ?");
+                args.add(query.sessionId().trim());
+            }
+            if (!isBlank(query.eventType())) {
+                sql.append(" AND event_type = ?");
+                args.add(query.eventType().trim());
+            }
+            if (!isBlank(query.traceId())) {
+                sql.append(" AND payload_json LIKE ?");
+                args.add("%" + query.traceId().trim() + "%");
+            }
+            sql.append(" ORDER BY created_at DESC LIMIT ?");
+            args.add(query.normalizedLimit());
+            return jdbcTemplate.query(
+                    sql.toString(),
+                    (rs, rowNum) -> new RuntimeEventRecord(
+                            rs.getString("id"),
+                            rs.getString("user_id"),
+                            rs.getString("device_id"),
+                            rs.getString("event_type"),
+                            rs.getString("session_id"),
+                            rs.getString("payload_json"),
+                            rs.getTimestamp("created_at").toInstant()
+                    ),
+                    args.toArray()
+            );
+        }
+        return localEvents.stream()
+                .filter(event -> event.userId().equals(userId))
+                .filter(event -> isBlank(query.sessionId()) || event.sessionId().equals(query.sessionId().trim()))
+                .filter(event -> isBlank(query.eventType()) || event.eventType().equals(query.eventType().trim()))
+                .filter(event -> isBlank(query.traceId()) || event.payloadJson().contains(query.traceId().trim()))
+                .limit(query.normalizedLimit())
+                .toList();
+    }
+
     private void updateDeviceHeartbeat(
             JdbcTemplate jdbcTemplate,
             String deviceId,
@@ -213,6 +299,10 @@ public class JdbcRuntimeIngestRepository implements RuntimeIngestRepository {
             throw new IllegalArgumentException(name + " 不能为空");
         }
         return text;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String defaultText(String value, String fallback) {

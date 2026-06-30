@@ -311,26 +311,72 @@
         </div>
       </section>
 
-      <section v-if="activeView === 'observability'" class="grid two">
+      <section v-if="activeView === 'observability'" class="grid observability-grid">
+        <div class="panel runtime-panel">
+          <div class="panel-title">
+            <h3>运行时调用链</h3>
+            <div class="title-actions">
+              <el-button :icon="Refresh" @click="loadRuntimeObservability">刷新链路</el-button>
+            </div>
+          </div>
+
+          <div class="runtime-filters">
+            <el-select v-model="runtimeFilters.userId" placeholder="选择运行时用户" filterable @change="loadRuntimeEvents">
+              <el-option
+                v-for="device in runtimeDevices"
+                :key="device.deviceId"
+                :label="`${device.deviceName || 'TonePilot Runtime'} / ${device.userId}`"
+                :value="device.userId"
+              />
+            </el-select>
+            <el-input v-model="runtimeFilters.sessionId" clearable placeholder="Session ID" @keyup.enter="loadRuntimeEvents" />
+            <el-input v-model="runtimeFilters.traceId" clearable placeholder="Trace ID" @keyup.enter="loadRuntimeEvents" />
+            <el-input v-model="runtimeFilters.eventType" clearable placeholder="事件类型" @keyup.enter="loadRuntimeEvents" />
+            <el-button type="primary" @click="loadRuntimeEvents">查询</el-button>
+          </div>
+
+          <el-table :data="runtimeEvents" height="420" highlight-current-row @row-click="selectRuntimeEvent">
+            <el-table-column prop="createdAt" label="时间" width="190">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column prop="eventType" label="事件" width="220" />
+            <el-table-column prop="sessionId" label="会话" min-width="170" show-overflow-tooltip />
+            <el-table-column label="Trace" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ runtimePayload(row).traceId || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="摘要" min-width="240" show-overflow-tooltip>
+              <template #default="{ row }">{{ runtimeSummary(row) }}</template>
+            </el-table-column>
+          </el-table>
+
+          <div class="runtime-detail">
+            <div class="detail-heading">
+              <span>事件详情</span>
+              <el-tag v-if="selectedRuntimeEvent" size="small" effect="plain">{{ selectedRuntimeEvent.eventType }}</el-tag>
+            </div>
+            <pre>{{ selectedRuntimePayload || '选择一条运行时事件后查看完整 payload。' }}</pre>
+          </div>
+        </div>
+
         <div class="panel">
           <div class="panel-title">
             <h3>LLM 调用</h3>
             <el-button :icon="Refresh" @click="loadObservability">刷新</el-button>
           </div>
-          <el-table :data="llmCalls" height="560">
+          <el-table :data="llmCalls" height="260">
             <el-table-column prop="provider" label="模型厂商" width="120" />
             <el-table-column prop="model" label="模型" width="150" />
             <el-table-column prop="purpose" label="用途" min-width="160" />
             <el-table-column prop="success" label="成功" width="90" />
           </el-table>
-        </div>
 
-        <div class="panel">
-          <div class="panel-title">
+          <el-divider />
+
+          <div class="panel-title compact">
             <h3>审计事件</h3>
             <el-button :icon="DataAnalysis" @click="runBenchmark">运行评估</el-button>
           </div>
-          <el-table :data="auditEvents" height="480">
+          <el-table :data="auditEvents" height="260">
             <el-table-column prop="eventType" label="事件" width="150" />
             <el-table-column prop="actor" label="来源" width="130" />
             <el-table-column prop="summary" label="摘要" min-width="220" />
@@ -373,12 +419,23 @@ const knowledgeMaterials = ref<any[]>([])
 const samples = ref<any[]>([])
 const llmCalls = ref<any[]>([])
 const auditEvents = ref<any[]>([])
+const runtimeDevices = ref<any[]>([])
+const runtimeEvents = ref<any[]>([])
+const selectedRuntimeEvent = ref<any | undefined>()
+const selectedRuntimePayload = ref('')
 const knowledgeStatus = ref('')
 const selectedSourceId = ref<number | undefined>()
 const extractingMaterialId = ref<number | undefined>()
 const importingDouyin = ref(false)
 const sampleFile = ref<File | undefined>()
 const benchmarkSummary = ref('')
+const runtimeFilters = reactive({
+  userId: '',
+  sessionId: '',
+  traceId: '',
+  eventType: '',
+  limit: 200
+})
 
 const styleForm = reactive({
   styleName: '夜景电影感',
@@ -438,7 +495,7 @@ const pageSubtitle = computed(() => {
   if (activeView.value === 'knowledge') return '维护 Agent 可检索的场景策略、参数经验和审核状态'
   if (activeView.value === 'materials') return '登记抖音教程、大师调色记录、手工笔记等来源，并抽取成待审核知识'
   if (activeView.value === 'samples') return '上传管理员样片，分析风格并生成可审核知识'
-  if (activeView.value === 'observability') return '查看 LLM 调用、审计事件和自动化评估结果'
+  if (activeView.value === 'observability') return '追踪本地运行时用户输入、Agent 决策、大模型回复和 Lightroom 工具调用'
   return '维护用户端插件可引用的调色风格定义'
 })
 
@@ -658,6 +715,67 @@ async function loadObservability() {
   ])
   llmCalls.value = calls
   auditEvents.value = events
+}
+
+async function loadRuntimeObservability() {
+  runtimeDevices.value = await unwrap<any[]>(api.get('/api/runtime/devices'))
+  if (!runtimeFilters.userId && runtimeDevices.value.length > 0) {
+    runtimeFilters.userId = runtimeDevices.value[0].userId
+  }
+  await loadRuntimeEvents()
+}
+
+async function loadRuntimeEvents() {
+  if (!runtimeFilters.userId) {
+    runtimeEvents.value = []
+    selectedRuntimeEvent.value = undefined
+    selectedRuntimePayload.value = ''
+    return
+  }
+  runtimeEvents.value = await unwrap<any[]>(api.get('/api/runtime/events', {
+    params: {
+      userId: runtimeFilters.userId,
+      sessionId: runtimeFilters.sessionId || undefined,
+      traceId: runtimeFilters.traceId || undefined,
+      eventType: runtimeFilters.eventType || undefined,
+      limit: runtimeFilters.limit
+    }
+  }))
+  selectedRuntimeEvent.value = runtimeEvents.value[0]
+  selectedRuntimePayload.value = selectedRuntimeEvent.value ? prettyPayload(selectedRuntimeEvent.value) : ''
+}
+
+function selectRuntimeEvent(row: any) {
+  selectedRuntimeEvent.value = row
+  selectedRuntimePayload.value = prettyPayload(row)
+}
+
+function runtimePayload(row: any) {
+  try {
+    return JSON.parse(row.payloadJson || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function runtimeSummary(row: any) {
+  const payload = runtimePayload(row)
+  const details = payload.details || payload
+  if (details.responseBody) return String(details.responseBody).slice(0, 90)
+  if (details.userMessage) return String(details.userMessage).slice(0, 90)
+  if (details.message) return String(details.message).slice(0, 90)
+  if (details.error) return String(details.error).slice(0, 90)
+  if (details.analysis) return JSON.stringify(details.analysis).slice(0, 90)
+  return JSON.stringify(details).slice(0, 90)
+}
+
+function prettyPayload(row: any) {
+  return JSON.stringify(runtimePayload(row), null, 2)
+}
+
+function formatTime(value: string) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
 async function runBenchmark() {

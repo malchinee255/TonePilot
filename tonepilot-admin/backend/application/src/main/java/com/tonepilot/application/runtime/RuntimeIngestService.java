@@ -67,7 +67,15 @@ public class RuntimeIngestService {
         return repository.recordEvent(request);
     }
 
+    public List<RuntimeDeviceRecord> listDevices() {
+        return repository.listDevices();
+    }
+
     public List<RuntimeEventRecord> listEvents(String userId) {
         return repository.listEvents(userId);
+    }
+
+    public List<RuntimeEventRecord> listEvents(RuntimeEventQuery query) {
+        return repository.listEvents(query);
     }
 }

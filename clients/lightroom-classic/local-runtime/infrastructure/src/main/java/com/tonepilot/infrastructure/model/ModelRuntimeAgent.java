@@ -60,17 +60,21 @@ public class ModelRuntimeAgent {
             throw new IllegalStateException("模型配置不完整，请在左侧“模型设置”中填写 Base URL、模型名称和 API Key。");
         }
         try {
+            String systemPrompt = systemPrompt();
+            String userPrompt = userPrompt(input);
             traceLogger.info("model.request.sending", "", Map.of(
                     "provider", provider,
                     "baseUrl", config.baseUrl(),
-                    "model", config.model()
+                    "model", config.model(),
+                    "userMessage", input.message() == null ? "" : input.message(),
+                    "userPrompt", userPrompt
             ));
             String body = objectMapper.writeValueAsString(Map.of(
                     "model", config.model(),
                     "temperature", 0.2,
                     "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user", "content", userPrompt(input))
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", userPrompt)
                     )
             ));
             HttpRequest request = HttpRequest.newBuilder()
@@ -83,7 +87,8 @@ public class ModelRuntimeAgent {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             traceLogger.info("model.response.received", "", Map.of(
                     "provider", provider,
-                    "statusCode", response.statusCode()
+                    "statusCode", response.statusCode(),
+                    "responseBody", response.body() == null ? "" : response.body()
             ));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.debug("{} 模型调用失败，状态码：{}", provider, response.statusCode());
