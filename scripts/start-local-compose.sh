@@ -58,8 +58,11 @@ export TONEPILOT_VECTOR_STORE="milvus"
 export MILVUS_URI="http://localhost:19530"
 export MILVUS_COLLECTION="tonepilot_knowledge"
 
+echo "安装管理端后端多模块依赖"
+mvn -q -DskipTests install
+
 : > "${BACKEND_LOG}"
-setsid nohup mvn -pl starter -am spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &
+setsid nohup mvn -f starter/pom.xml spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &
 echo "$!" > "${LOG_DIR}/backend-compose.pid"
 echo "后端启动中，日志：${BACKEND_LOG}"
 echo "后端进程 PID 文件：${LOG_DIR}/backend-compose.pid"

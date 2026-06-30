@@ -25,7 +25,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 
 import java.nio.file.Path;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.tonepilot")
 @EnableConfigurationProperties(RuntimeProperties.class)
 public class TonePilotLocalRuntimeApplication {
 

@@ -38,4 +38,8 @@ echo "[TonePilot Local Runtime] 运行时目录: ${TONEPILOT_LIGHTROOM_BRIDGE_RO
 echo "[TonePilot Local Runtime] Lightroom 任务目录: ${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT}"
 echo "[TonePilot Local Runtime] 监听地址: ${TONEPILOT_LIGHTROOM_BRIDGE_PUBLIC_URL}"
 
-mvn -pl starter -am spring-boot:run
+echo "[TonePilot Local Runtime] 安装本地多模块依赖"
+mvn -q -DskipTests install
+
+echo "[TonePilot Local Runtime] 启动 starter 模块"
+mvn -f starter/pom.xml spring-boot:run
