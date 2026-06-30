@@ -49,33 +49,32 @@ public class ModelRuntimeAgent {
     public AgentTuneResult plan(
             AgentInput input,
             String provider,
-            Map<String, Object> runtimeConfig
+            Map<String, Object> runtimeConfig,
+            String sessionId
     ) {
         if (provider == null || provider.isBlank() || "rule".equals(provider)) {
             throw new IllegalStateException("请先选择 OpenAI 或阿里 Qwen2 模型，本地规则模式已移除。");
         }
         ProviderConfig config = providerConfig(provider, runtimeConfig);
         if (!config.ready()) {
-            traceLogger.warn("model.provider.not_ready", "", Map.of("provider", provider));
+            traceLogger.warn("model.provider.not_ready", sessionId, Map.of("provider", provider));
             throw new IllegalStateException("模型配置不完整，请在左侧“模型设置”中填写 Base URL、模型名称和 API Key。");
         }
         try {
             String systemPrompt = systemPrompt();
             String userPrompt = userPrompt(input);
-            traceLogger.info("model.request.sending", "", Map.of(
+            traceLogger.info("model.request.sending", sessionId, Map.of(
                     "provider", provider,
                     "baseUrl", config.baseUrl(),
                     "model", config.model(),
                     "userMessage", input.message() == null ? "" : input.message(),
                     "userPrompt", userPrompt
             ));
-            String body = objectMapper.writeValueAsString(Map.of(
-                    "model", config.model(),
-                    "temperature", 0.2,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt),
-                            Map.of("role", "user", "content", userPrompt)
-                    )
+            String body = objectMapper.writeValueAsString(buildChatRequestPayload(
+                    provider,
+                    config.model(),
+                    systemPrompt,
+                    userPrompt
             ));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(trimSlash(config.baseUrl()) + "/chat/completions"))
@@ -85,23 +84,23 @@ public class ModelRuntimeAgent {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            traceLogger.info("model.response.received", "", Map.of(
+            traceLogger.info("model.response.received", sessionId, Map.of(
                     "provider", provider,
                     "statusCode", response.statusCode(),
                     "responseBody", response.body() == null ? "" : response.body()
             ));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.debug("{} 模型调用失败，状态码：{}", provider, response.statusCode());
-                traceLogger.warn("model.response.non_success", "", Map.of(
+                traceLogger.warn("model.response.non_success", sessionId, Map.of(
                         "provider", provider,
                         "statusCode", response.statusCode()
                 ));
                 throw new IllegalStateException("模型调用失败，HTTP 状态码：" + response.statusCode());
             }
-            return parseModelResult(input, response.body());
+            return parseModelResult(input, response.body(), sessionId);
         } catch (Exception exception) {
             log.debug("{} 模型调用失败：{}", provider, exception.getMessage());
-            traceLogger.warn("model.request.failed", "", Map.of(
+            traceLogger.warn("model.request.failed", sessionId, Map.of(
                     "provider", provider,
                     "error", exception.getMessage()
             ));
@@ -112,9 +111,30 @@ public class ModelRuntimeAgent {
         }
     }
 
+    private Map<String, Object> buildChatRequestPayload(
+            String provider,
+            String model,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("temperature", 0.2);
+        payload.put("max_tokens", 1600);
+        payload.put("messages", List.of(
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
+        ));
+        if ("qwen2".equalsIgnoreCase(provider)) {
+            payload.put("enable_thinking", false);
+        }
+        return payload;
+    }
+
     private AgentTuneResult parseModelResult(
             AgentInput input,
-            String responseBody
+            String responseBody,
+            String sessionId
     ) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
@@ -135,7 +155,7 @@ public class ModelRuntimeAgent {
                     : Map.of("intent", input.message(), "photoType", "当前 Lightroom 照片", "recommendedStyle", "由模型分析生成");
             AgentThought agentThought = parseAgentThought(json, analysis);
             if (developSettings == null || developSettings.isEmpty()) {
-                traceLogger.info("model.parse.analysis_only", "", Map.of(
+                traceLogger.info("model.parse.analysis_only", sessionId, Map.of(
                         "hasAnalysis", json.has("analysis"),
                         "localAdjustmentCount", localAdjustments.size(),
                         "hasAgentThought", json.has("agentThought")
@@ -150,7 +170,7 @@ public class ModelRuntimeAgent {
                         content
                 );
             }
-            traceLogger.info("model.parse.succeeded", "", Map.of(
+            traceLogger.info("model.parse.succeeded", sessionId, Map.of(
                     "settingCount", developSettings.size(),
                     "localAdjustmentCount", localAdjustments.size(),
                     "hasAnalysis", json.has("analysis"),
@@ -167,7 +187,7 @@ public class ModelRuntimeAgent {
             );
         } catch (Exception exception) {
             log.debug("模型响应解析失败：{}", exception.getMessage());
-            traceLogger.warn("model.parse.failed", "", Map.of("error", exception.getMessage()));
+            traceLogger.warn("model.parse.failed", sessionId, Map.of("error", exception.getMessage()));
             throw new IllegalStateException("模型响应解析失败：" + exception.getMessage(), exception);
         }
     }

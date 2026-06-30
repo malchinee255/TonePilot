@@ -92,7 +92,7 @@ public class RuntimeAgentOrchestrator {
         AgentInput agentInput = new AgentInput(message, currentAdjustment, knowledgeMatches);
         AgentTuneResult tuneResult;
         try {
-            tuneResult = modelAgent.plan(agentInput, provider, runtimeConfig);
+            tuneResult = modelAgent.plan(agentInput, provider, runtimeConfig, sessionId);
         } catch (Exception exception) {
             traceLogger.warn("agent.model.failed", sessionId, Map.of(
                     "provider", provider,

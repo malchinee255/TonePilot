@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,7 +67,7 @@ class RuntimeAgentOrchestratorTest {
         TestContext context = new TestContext();
         context.lightroomAvailable();
         context.qwenSelected();
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
                 "这张照片是夜景城市照片，灯光层次可以作为主要表现点。",
                 Map.of(),
                 List.of(),
@@ -92,7 +93,7 @@ class RuntimeAgentOrchestratorTest {
         TestContext context = new TestContext();
         context.lightroomAvailable();
         context.qwenSelected();
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
                 "我会压一点高光、提亮暗部，并增强夜景电影感。",
                 Map.of("Exposure2012", 0.2),
                 List.of(new AgentDelta("basic", "Exposure2012", "曝光", 0, 0.2, 0.2, "提亮画面")),
@@ -131,7 +132,7 @@ class RuntimeAgentOrchestratorTest {
                 "region", Map.of("x", 0.0, "y", 0.0, "w", 1.0, "h", 0.42),
                 "settings", Map.of("Exposure2012", -0.25, "Highlights2012", -18)
         );
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
                 "我会先整体提亮，再计划用线性渐变压暗天空；当前插件只会先执行全局参数。",
                 Map.of("Exposure2012", 0.12),
                 List.of(new AgentDelta("basic", "Exposure2012", "曝光", 0, 0.12, 0.12, "整体提亮")),
@@ -162,7 +163,7 @@ class RuntimeAgentOrchestratorTest {
         TestContext context = new TestContext();
         context.lightroomAvailable();
         context.qwenSelected();
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap()))
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString()))
                 .thenThrow(new IllegalStateException("模型配置不完整，请先填写 API Key。"));
 
         Map<String, Object> result = context.orchestrator.chat(Map.of(
@@ -186,7 +187,7 @@ class RuntimeAgentOrchestratorTest {
                 "content", "夜景照片先压高光，再提阴影保护灯光层次。",
                 "score", 0.92
         )));
-        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
                 "我会参考夜景高光控制知识给出建议。",
                 Map.of(),
                 List.of(),
@@ -200,7 +201,7 @@ class RuntimeAgentOrchestratorTest {
         ));
 
         var captor = forClass(AgentInput.class);
-        verify(context.modelAgent).plan(captor.capture(), eq("qwen2"), anyMap());
+        verify(context.modelAgent).plan(captor.capture(), eq("qwen2"), anyMap(), anyString());
         assertThat(captor.getValue().knowledgeMatches()).hasSize(1);
         assertThat(captor.getValue().knowledgeMatches().get(0).get("title")).isEqualTo("夜景高光控制");
     }

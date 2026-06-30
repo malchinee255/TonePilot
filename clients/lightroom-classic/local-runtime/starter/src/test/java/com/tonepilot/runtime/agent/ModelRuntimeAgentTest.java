@@ -38,7 +38,8 @@ class ModelRuntimeAgentTest {
         assertThatThrownBy(() -> modelAgent.plan(
                 new AgentInput("帮我修图", Map.of()),
                 "rule",
-                Map.of("provider", "rule")
+                Map.of("provider", "rule"),
+                "session-test"
         )).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("本地规则模式已移除");
     }
@@ -51,9 +52,27 @@ class ModelRuntimeAgentTest {
         assertThatThrownBy(() -> modelAgent.plan(
                 new AgentInput("帮我修图", Map.of("Temperature", 4200)),
                 "qwen2",
-                Map.of("provider", "qwen2", "qwen2", Map.of("model", "qwen-plus"))
+                Map.of("provider", "qwen2", "qwen2", Map.of("model", "qwen-plus")),
+                "session-test"
         )).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("模型配置不完整");
+    }
+
+    @Test
+    void qwenRequestDisablesThinkingAndLimitsOutputTokens() {
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+
+        Map<String, Object> payload = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "buildChatRequestPayload",
+                "qwen2",
+                "qwen3.6-plus",
+                "system prompt",
+                "user prompt"
+        );
+
+        assertThat(payload).containsEntry("enable_thinking", false);
+        assertThat(payload).containsEntry("max_tokens", 1600);
     }
 
     @Test
@@ -76,7 +95,8 @@ class ModelRuntimeAgentTest {
                 modelAgent,
                 "parseModelResult",
                 new AgentInput("帮我分析并修图", Map.of("Exposure2012", 0)),
-                modelResponse
+                modelResponse,
+                "session-test"
         );
 
         assertThat(result).isNotNull();
