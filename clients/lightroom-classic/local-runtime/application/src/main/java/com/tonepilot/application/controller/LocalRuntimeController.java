@@ -33,11 +33,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @CrossOrigin
 @RestController
@@ -94,6 +96,45 @@ public class LocalRuntimeController {
                     "messageLength", String.valueOf(payload.getOrDefault("message", "")).length()
             ));
             return orchestrator.chat(payload);
+        }
+    }
+
+    @PostMapping(value = "/api/lightroom-agent/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestBody Map<String, Object> payload) {
+        String sessionId = String.valueOf(payload.getOrDefault("sessionId", ""));
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try (TraceContextManager.TraceScope ignored = traceContextManager.open(sessionId)) {
+                traceLogger.info("api.agent_chat_stream.request", sessionId, Map.of(
+                        "provider", payload.getOrDefault("provider", ""),
+                        "messageLength", String.valueOf(payload.getOrDefault("message", "")).length()
+                ));
+                orchestrator.chat(payload, event -> sendEvent(emitter, event));
+                emitter.complete();
+            } catch (Exception exception) {
+                try {
+                    sendEvent(emitter, AgentReactEvent.of(
+                            "agent.error",
+                            "流式请求失败",
+                            exception.getMessage(),
+                            Map.of("error", exception.getMessage())
+                    ));
+                } catch (Exception ignored) {
+                    // SSE 客户端断开时无需继续处理。
+                }
+                emitter.completeWithError(exception);
+            }
+        });
+        return emitter;
+    }
+
+    private void sendEvent(SseEmitter emitter, AgentReactEvent event) {
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(event.type())
+                    .data(event.toMap(), MediaType.APPLICATION_JSON));
+        } catch (IOException exception) {
+            throw new IllegalStateException("发送 Agent 流式事件失败：" + exception.getMessage(), exception);
         }
     }
 

@@ -25,9 +25,11 @@ import com.tonepilot.infrastructure.observability.RuntimeTraceLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 @Service
 public class RuntimeAgentOrchestrator {
@@ -52,32 +54,48 @@ public class RuntimeAgentOrchestrator {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> chat(Map<String, Object> payload) {
+        return chat(payload, event -> {
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> chat(Map<String, Object> payload, Consumer<AgentReactEvent> eventSink) {
+        List<AgentReactEvent> reactEvents = new ArrayList<>();
         String sessionId = sessionId(payload);
         String message = String.valueOf(payload.getOrDefault("message", "")).trim();
         String requestedProvider = String.valueOf(payload.getOrDefault("provider", ""));
+        emit(reactEvents, eventSink, sessionId, "agent.started", "开始处理请求", "我已收到你的修图/分析请求，准备进入 ReAct 判断。", Map.of(
+                "messageLength", message.length(),
+                "requestedProvider", requestedProvider
+        ));
         traceLogger.info("agent.request.received", sessionId, Map.of(
                 "messageLength", message.length(),
                 "requestedProvider", requestedProvider
         ));
 
         if (message.isBlank()) {
+            emit(reactEvents, eventSink, sessionId, "agent.error", "请求被拒绝", "请输入调色或分析指令。", Map.of("reason", "empty_message"));
             traceLogger.warn("agent.request.rejected", sessionId, Map.of("reason", "empty_message"));
-            return Map.of("success", false, "message", "请输入调色或分析指令。");
+            return withEvents(Map.of("success", false, "message", "请输入调色或分析指令。"), reactEvents);
         }
 
         Map<String, Object> status = stateService.status();
+        emit(reactEvents, eventSink, sessionId, "agent.observation", "观察 Lightroom 状态", "我正在确认 Lightroom 插件是否可用。", Map.of("status", status));
         if (!Boolean.TRUE.equals(status.get("available"))) {
+            emit(reactEvents, eventSink, sessionId, "agent.error", "Lightroom 不可用", String.valueOf(status.getOrDefault("message", "请确认 Lightroom 插件正在运行并写入心跳。")), status);
             traceLogger.warn("agent.lightroom.unavailable", sessionId, status);
-            return Map.of(
+            return withEvents(Map.of(
                     "success", false,
                     "message", "Lightroom 插件不可用：" + status.getOrDefault("message", "请确认 Lightroom 插件正在运行并写入心跳。")
-            );
+            ), reactEvents);
         }
 
         Map<String, Object> selected = stateService.selectedPhoto();
+        emit(reactEvents, eventSink, sessionId, "agent.observation", "读取当前照片", "我正在读取 Lightroom 当前选中照片、元数据和当前调色参数。", Map.of("selected", selected));
         if (!Boolean.TRUE.equals(selected.get("available"))) {
+            emit(reactEvents, eventSink, sessionId, "agent.error", "当前没有可用照片", String.valueOf(selected.getOrDefault("message", "Lightroom 当前没有选中照片。")), selected);
             traceLogger.warn("agent.photo.unavailable", sessionId, selected);
-            return Map.of("success", false, "message", selected.getOrDefault("message", "Lightroom 当前没有选中照片。"));
+            return withEvents(Map.of("success", false, "message", selected.getOrDefault("message", "Lightroom 当前没有选中照片。")), reactEvents);
         }
 
         Map<String, Object> currentAdjustment = selected.get("currentAdjustment") instanceof Map<?, ?> map
@@ -85,21 +103,40 @@ public class RuntimeAgentOrchestrator {
                 : Map.of();
         Map<String, Object> runtimeConfig = configService.readInternalConfig();
         String provider = String.valueOf(payload.getOrDefault("provider", runtimeConfig.getOrDefault("provider", "qwen2")));
+        emit(reactEvents, eventSink, sessionId, "agent.observation", "选择模型", "我会使用当前选择的模型来完成本轮判断。", Map.of("provider", provider));
         traceLogger.info("agent.provider.selected", sessionId, Map.of("provider", provider));
+
         List<Map<String, Object>> knowledgeMatches = knowledgeMatches(message, runtimeConfig);
+        emit(reactEvents, eventSink, sessionId, "knowledge.retrieved", "检索知识库", knowledgeMatches.isEmpty()
+                ? "没有检索到可用知识，我会只基于当前照片和对话上下文判断。"
+                : "我已检索到可参考的调色知识，会把它纳入本轮判断。", Map.of("matchCount", knowledgeMatches.size(), "matches", knowledgeMatches));
         traceLogger.info("agent.knowledge.retrieved", sessionId, Map.of("matchCount", knowledgeMatches.size()));
 
         AgentInput agentInput = new AgentInput(message, currentAdjustment, knowledgeMatches);
         AgentTuneResult tuneResult;
         try {
+            emit(reactEvents, eventSink, sessionId, "model.request", "调用主 Agent 模型", "我正在让主 Agent 结合意图、照片参数和知识库生成下一步决策。", Map.of("provider", provider));
             tuneResult = modelAgent.plan(agentInput, provider, runtimeConfig, sessionId);
+            emit(reactEvents, eventSink, sessionId, "model.response", "模型返回完成", "主 Agent 已返回可展示的判断结果。", Map.of(
+                    "hasDevelopSettings", tuneResult.developSettings() != null && !tuneResult.developSettings().isEmpty(),
+                    "settingCount", tuneResult.developSettings() == null ? 0 : tuneResult.developSettings().size(),
+                    "localAdjustmentCount", tuneResult.localAdjustments() == null ? 0 : tuneResult.localAdjustments().size()
+            ));
         } catch (Exception exception) {
+            emit(reactEvents, eventSink, sessionId, "agent.error", "模型调用失败", exception.getMessage(), Map.of("provider", provider, "error", exception.getMessage()));
             traceLogger.warn("agent.model.failed", sessionId, Map.of(
                     "provider", provider,
                     "error", exception.getMessage()
             ));
-            return Map.of("success", false, "message", exception.getMessage());
+            return withEvents(Map.of("success", false, "message", exception.getMessage()), reactEvents);
         }
+        emit(reactEvents, eventSink, sessionId, "agent.thought", "主 Agent 判断", visibleThoughtContent(tuneResult), Map.of(
+                "agentThought", tuneResult.agentThought(),
+                "analysis", tuneResult.analysis(),
+                "deltas", tuneResult.deltas(),
+                "developSettings", tuneResult.developSettings(),
+                "localAdjustments", tuneResult.localAdjustments()
+        ));
         traceLogger.info("agent.intent.analyzed", sessionId, Map.of(
                 "deltaCount", tuneResult.deltas().size(),
                 "settingCount", tuneResult.developSettings().size(),
@@ -112,7 +149,9 @@ public class RuntimeAgentOrchestrator {
         data.put("knowledgeMatches", knowledgeMatches);
 
         if (shouldApply(message, tuneResult)) {
+            emit(reactEvents, eventSink, sessionId, "tool.call", "调用 Lightroom 工具", "主 Agent 决定执行全局 Develop Settings 调色。", Map.of("developSettings", tuneResult.developSettings()));
             Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
+            emit(reactEvents, eventSink, sessionId, "tool.result", "Lightroom 任务已提交", String.valueOf(applyResult.getOrDefault("message", "已提交 Lightroom 调色任务。")), Map.of("apply", applyResult));
             data.put("action", "tool_submitted");
             data.put("apply", applyResult);
             data.put("afterPreviewUrl", "");
@@ -120,6 +159,8 @@ public class RuntimeAgentOrchestrator {
                     tuneResult.assistantMessage(),
                     "我已经根据这个判断调用 Lightroom 执行调色，完成后会刷新修图后预览。"
             ));
+            emit(reactEvents, eventSink, sessionId, "agent.final", "本轮完成", String.valueOf(data.get("assistantMessage")), Map.of("data", data));
+            data.put("reactEvents", reactEvents.stream().map(AgentReactEvent::toMap).toList());
             adminRuntimeClient.recordEvent("agent.tool.submitted", sessionId, data);
             traceLogger.info("agent.tool.submitted", sessionId, Map.of("apply", applyResult));
             return Map.of("success", applyResult.getOrDefault("success", true), "message", data.get("assistantMessage"), "data", data);
@@ -127,6 +168,8 @@ public class RuntimeAgentOrchestrator {
 
         data.put("action", "respond");
         data.put("assistantMessage", tuneResult.assistantMessage());
+        emit(reactEvents, eventSink, sessionId, "agent.final", "本轮完成", tuneResult.assistantMessage(), Map.of("data", data));
+        data.put("reactEvents", reactEvents.stream().map(AgentReactEvent::toMap).toList());
         adminRuntimeClient.recordEvent("agent.message.responded", sessionId, data);
         traceLogger.info("agent.response.ready", sessionId, Map.of("action", "respond"));
         return Map.of("success", true, "message", data.get("assistantMessage"), "data", data);
@@ -134,6 +177,52 @@ public class RuntimeAgentOrchestrator {
 
     public Map<String, Object> applyStatus(String jobId) {
         return toolService.applyStatus(jobId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> withEvents(Map<String, Object> result, List<AgentReactEvent> reactEvents) {
+        Map<String, Object> value = new LinkedHashMap<>(result);
+        value.put("reactEvents", reactEvents.stream().map(AgentReactEvent::toMap).toList());
+        if (value.get("data") instanceof Map<?, ?> dataMap) {
+            Map<String, Object> data = new LinkedHashMap<>((Map<String, Object>) dataMap);
+            data.put("reactEvents", reactEvents.stream().map(AgentReactEvent::toMap).toList());
+            value.put("data", data);
+        }
+        return value;
+    }
+
+    private void emit(
+            List<AgentReactEvent> events,
+            Consumer<AgentReactEvent> sink,
+            String sessionId,
+            String type,
+            String title,
+            String content,
+            Map<String, Object> payload
+    ) {
+        AgentReactEvent event = AgentReactEvent.of(type, title, content, payload);
+        events.add(event);
+        if (sink != null) {
+            sink.accept(event);
+        }
+        traceLogger.info(type, sessionId, event.toMap());
+        adminRuntimeClient.recordEvent(type, sessionId, event.toMap());
+    }
+
+    private String visibleThoughtContent(AgentTuneResult tuneResult) {
+        AgentThought thought = tuneResult.agentThought();
+        if (thought != null && thought.summary() != null && !thought.summary().isBlank()) {
+            StringBuilder builder = new StringBuilder(thought.summary());
+            if (thought.reasoningVisible() != null && !thought.reasoningVisible().isBlank()) {
+                builder.append("\n").append(thought.reasoningVisible());
+            }
+            if (thought.nextAction() != null && !thought.nextAction().isBlank()) {
+                builder.append("\n下一步：").append(thought.nextAction());
+            }
+            return builder.toString();
+        }
+        Map<String, Object> analysis = tuneResult.analysis() == null ? Map.of() : tuneResult.analysis();
+        return String.valueOf(analysis.getOrDefault("recommendedStyle", tuneResult.assistantMessage()));
     }
 
     private boolean shouldApply(String message, AgentTuneResult tuneResult) {

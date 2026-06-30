@@ -206,6 +206,50 @@ class RuntimeAgentOrchestratorTest {
         assertThat(captor.getValue().knowledgeMatches().get(0).get("title")).isEqualTo("夜景高光控制");
     }
 
+
+
+    @Test
+    void chatReturnsObservableReactEventsForAgentRun() {
+        TestContext context = new TestContext();
+        context.lightroomAvailable();
+        context.qwenSelected();
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
+                "我会先说明夜景照片的调色方向。",
+                new AgentThought(
+                        "判断为夜景城市照片",
+                        List.of("当前选中 Lightroom 照片", "用户要求分析照片"),
+                        "先观察照片和知识库，再决定本轮只回复分析。",
+                        "respond",
+                        "等待用户确认是否修图",
+                        List.of("不调用 Lightroom 工具"),
+                        List.of("确认按这个方向修")
+                ),
+                Map.of(),
+                List.of(),
+                Map.of("intent", "分析照片", "photoType", "夜景城市照片", "recommendedStyle", "先给方向"),
+                List.of(),
+                "{\"assistantMessage\":\"我会先说明夜景照片的调色方向。\"}"
+        ));
+
+        Map<String, Object> result = context.orchestrator.chat(Map.of(
+                "message", "帮我分析这张图",
+                "provider", "qwen2",
+                "sessionId", "session-react"
+        ));
+
+        Map<String, Object> data = (Map<String, Object>) result.get("data");
+        List<Map<String, Object>> events = (List<Map<String, Object>>) data.get("reactEvents");
+        assertThat(events).extracting(event -> event.get("type"))
+                .containsSubsequence(
+                        "agent.started",
+                        "agent.observation",
+                        "knowledge.retrieved",
+                        "model.request",
+                        "agent.thought",
+                        "agent.final"
+                );
+    }
+
     private static class TestContext {
         private final LightroomStateService stateService = mock(LightroomStateService.class);
         private final LightroomToolService toolService = mock(LightroomToolService.class);

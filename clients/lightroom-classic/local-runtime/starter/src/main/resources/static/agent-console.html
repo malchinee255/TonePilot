@@ -729,6 +729,7 @@
       node.innerHTML = '<span class="role">' + (role === 'user' ? '你' : 'Agent') + '</span>' + html
       chat.appendChild(node)
       chat.scrollTop = chat.scrollHeight
+      return node
     }
 
     function setImage(image, empty, url, emptyText) {
@@ -755,16 +756,9 @@
 
     function renderPhotoMeta(photo) {
       photoMeta.innerHTML = [
-        ['文件', photo.fileName],
-        ['格式', photo.fileFormat],
-        ['相机', photo.camera],
-        ['镜头', photo.lens],
-        ['ISO', photo.iso],
-        ['快门', photo.shutterSpeed],
-        ['光圈', photo.aperture],
-        ['焦段', photo.focalLength],
-        ['尺寸', photo.dimensions],
-        ['拍摄时间', photo.captureTime]
+        ['文件', photo.fileName], ['格式', photo.fileFormat], ['相机', photo.camera], ['镜头', photo.lens],
+        ['ISO', photo.iso], ['快门', photo.shutterSpeed], ['光圈', photo.aperture], ['焦段', photo.focalLength],
+        ['尺寸', photo.dimensions], ['拍摄时间', photo.captureTime]
       ].map(([key, value]) => '<span>' + key + '</span><strong>' + escapeHtml(value || '-') + '</strong>').join('')
     }
 
@@ -798,7 +792,6 @@
         setComparison('', '', '', '', '')
         return
       }
-
       const photo = payload.photo || {}
       const session = payload.session || {}
       const photoKey = session.photoKey || ''
@@ -806,7 +799,6 @@
       setStatus(photoStatus, 'Lightroom 已选中：' + photoName, 'ok')
       renderPhotoMeta(photo)
       renderVersions(session, photoName)
-
       const selectedBeforeUrl = session.baselinePreviewUrl || payload.baselinePreviewUrl || payload.previewUrl || ''
       const selectedAfterUrl = session.currentVersion?.previewUrl || ''
       const shouldSwitchPhoto = photoKey && comparisonPhotoKey && photoKey !== comparisonPhotoKey
@@ -844,11 +836,6 @@
       modelBaseUrl.value = config.baseUrl || ''
       modelName.value = config.model || ''
       modelApiKey.value = ''
-      const disabled = false
-      modelBaseUrl.disabled = disabled
-      modelName.disabled = disabled
-      modelApiKey.disabled = disabled
-      saveRuntimeConfig.disabled = disabled
       modelApiKey.placeholder = config.apiKeyConfigured ? '已配置，留空则不修改' : '保存在本机运行时'
     }
 
@@ -866,27 +853,74 @@
     async function saveConfig() {
       const value = provider.value || 'qwen2'
       const patch = { provider: value }
-      patch[value] = {
-        baseUrl: modelBaseUrl.value.trim(),
-        model: modelName.value.trim()
-      }
-      if (modelApiKey.value.trim()) {
-        patch[value].apiKey = modelApiKey.value.trim()
-      }
+      patch[value] = { baseUrl: modelBaseUrl.value.trim(), model: modelName.value.trim() }
+      if (modelApiKey.value.trim()) patch[value].apiKey = modelApiKey.value.trim()
       const response = await fetch('/api/runtime/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
       })
       runtimeConfig = await response.json()
       renderProviderConfig()
       addMessage('agent', '本地模型设置已保存。')
     }
 
+    function labelDecision(decision) {
+      const labels = { respond: '先回复分析，不直接修图', ask_user: '需要用户补充选择', apply_global_adjustments: '调用 Lightroom 全局调色', plan_local_adjustments: '给出局部蒙版计划' }
+      return labels[decision] || decision
+    }
+
+    function renderAgentThought(thought, analysis) {
+      const observations = (thought.observations || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      const toolPlan = (thought.toolPlan || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      return [
+        '<div class="agent-block">', '<strong>主 Agent 判断</strong>',
+        thought.summary ? '\n' + escapeHtml(thought.summary) : '',
+        observations ? '\n\n<strong>观察到的线索</strong><ul>' + observations + '</ul>' : '',
+        thought.reasoningVisible ? '\n<strong>判断依据</strong>\n' + escapeHtml(thought.reasoningVisible) : '',
+        thought.decision ? '\n\n<strong>本轮决策</strong>\n' + escapeHtml(labelDecision(thought.decision)) : '',
+        thought.nextAction ? '\n\n<strong>下一步</strong>\n' + escapeHtml(thought.nextAction) : '',
+        toolPlan ? '\n\n<strong>准备使用的工具动作</strong><ul>' + toolPlan + '</ul>' : '',
+        (!thought.summary && !observations && !thought.reasoningVisible)
+          ? '\n<strong>意图</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-')
+          : '',
+        '</div>'
+      ].join('')
+    }
+
+    function addThinkingMessage() {
+      const node = document.createElement('div')
+      node.className = 'message agent thinking-message'
+      node.innerHTML = '<span class="role">Agent</span><div class="thinking-card"><div class="thinking-line"><span class="thinking-dot"></span><strong>思考中...</strong></div><div>我正在观察当前照片、理解你的意图，并动态决定是否检索知识库、调用模型或使用 Lightroom 工具。</div></div>'
+      chat.appendChild(node)
+      chat.scrollTop = chat.scrollHeight
+      return node
+    }
+
+    function appendReactEvent(container, event) {
+      if (!container || !event) return
+      const type = event.type || ''
+      const title = event.title || type
+      const content = event.content || ''
+      const line = document.createElement('div')
+      line.className = 'thinking-line'
+      line.dataset.eventType = type
+      line.innerHTML = '<span class="thinking-dot"></span><div><strong>' + escapeHtml(title) + '</strong><br />' + escapeHtml(content) + '</div>'
+      container.querySelector('.thinking-card')?.appendChild(line)
+      if (type === 'agent.thought') {
+        line.innerHTML = '<span class="thinking-dot"></span><div><strong>主 Agent 判断</strong><br />' + escapeHtml(content) + '</div>'
+      }
+      chat.scrollTop = chat.scrollHeight
+    }
+
     function renderAgentResult(data) {
       const analysis = data.analysis || {}
-      const basis = (analysis.basis || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
-      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + '（' + escapeHtml(delta.delta) + '）</span></div>').join('')
+      const thought = data.agentThought || {}
+      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || item.content || '') + '</li>').join('')
+      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
+      const localPlans = (data.localAdjustments || []).map(plan => {
+        const region = plan.region ? JSON.stringify(plan.region) : '-'
+        const settings = plan.settings ? JSON.stringify(plan.settings) : '{}'
+        return '<div class="delta"><strong>' + escapeHtml(plan.target || plan.type || '局部区域') + '</strong><span>' + escapeHtml(plan.type || '-') + ' / ' + escapeHtml(plan.coordinateSpace || 'normalized_crop') + '<br />区域：' + escapeHtml(region) + '<br />参数：' + escapeHtml(settings) + '<br />' + escapeHtml(plan.reason || '') + '</span></div>'
+      }).join('')
       analysisSummary.innerHTML = [
         '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
         '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
@@ -895,78 +929,78 @@
       if (data.beforePreviewUrl || data.afterPreviewUrl) {
         setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
       }
-      if (data.session) {
-        renderVersions(data.session, data.photo?.fileName || currentPhoto?.photo?.fileName || '')
-        activateLeftTab('history')
-      }
+      const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
       addMessage('agent', [
-        '<div>意图分析：' + escapeHtml(analysis.intent || '-') + '</div>',
-        '<div>照片类型：' + escapeHtml(analysis.photoType || '-') + '</div>',
-        '<div>建议风格：' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
-        basis ? '<ul>' + basis + '</ul>' : '',
-        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
-        deltas ? '<div class="deltas">' + deltas + '</div>' : ''
+        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>', renderAgentThought(thought, analysis),
+        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
+        deltas ? '<div class="agent-block"><strong>全局调色参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
+        localPlans ? '<div class="agent-block"><strong>局部蒙版计划</strong><div class="deltas">' + localPlans + '</div></div>' : '',
+        data.action === 'tool_submitted' ? '<div class="agent-block">我已经调用 Lightroom 全局调色工具，正在等待本地插件处理完成。</div>' : '',
+        suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
       ].join(''))
+      chat.querySelectorAll('button[data-reply]').forEach(button => {
+        button.addEventListener('click', () => { prompt.value = button.dataset.reply || ''; sendMessage() })
+      })
+      if (data.action === 'tool_submitted' && data.apply?.jobId) pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
+    }
+
+    function parseSseChunk(buffer, onEvent) {
+      const parts = buffer.split('\n\n')
+      const rest = parts.pop() || ''
+      parts.forEach(part => {
+        const dataLines = part.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trim())
+        if (!dataLines.length) return
+        try { onEvent(JSON.parse(dataLines.join('\n'))) } catch (error) { console.warn('无法解析 Agent 流式事件', error) }
+      })
+      return rest
+    }
+
+    async function readReactStream(response, thinking) {
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+      let finalData = null
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        buffer = parseSseChunk(buffer, event => {
+          appendReactEvent(thinking, event)
+          if (event.type === 'agent.final') finalData = event.payload?.data || null
+          if (event.type === 'agent.error') throw new Error(event.content || 'Agent 执行失败')
+        })
+      }
+      if (buffer.trim()) {
+        parseSseChunk(buffer + '\n\n', event => {
+          appendReactEvent(thinking, event)
+          if (event.type === 'agent.final') finalData = event.payload?.data || null
+        })
+      }
+      return finalData
     }
 
     async function sendMessage() {
       const message = prompt.value.trim()
       if (!message) return
       addMessage('user', escapeHtml(message))
+      prompt.value = ''
+      const thinking = addThinkingMessage()
       send.disabled = true
-      setStatus(photoStatus, 'Agent 正在分析并修图...', '')
+      setStatus(photoStatus, 'Agent 正在 ReAct 分析...', '')
       try {
-        const response = await fetch('/api/lightroom-agent/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch('/api/lightroom-agent/chat/stream', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
           body: JSON.stringify({ message, provider: provider.value, sessionId })
         })
-        const result = await response.json()
-        if (!result.success) {
-          addMessage('agent', '没有完成修图：' + escapeHtml(result.message || '未知错误'))
-          return
-        }
-        sessionId = result.data.sessionId
-        renderAgentResult(result.data)
-        prompt.value = ''
-        await pollPhoto()
+        if (!response.ok) throw new Error('HTTP ' + response.status)
+        const data = await readReactStream(response, thinking)
+        if (!data) throw new Error('Agent 没有返回最终结果')
+        sessionId = data.sessionId
+        renderAgentResult(data)
       } catch (error) {
-        addMessage('agent', '调用失败：' + escapeHtml(error.message))
+        addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(error.message || '未知错误'))
       } finally {
         send.disabled = false
-      }
-    }
-
-    function renderAgentResult(data) {
-      const analysis = data.analysis || {}
-      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
-      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
-      const suggestedReplies = (data.suggestedReplies || []).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
-      analysisSummary.innerHTML = [
-        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
-        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
-        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
-      ].join('')
-      if (data.beforePreviewUrl || data.afterPreviewUrl) {
-        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
-      }
-      addMessage('agent', [
-        '<div><strong>Agent 决策：</strong>' + escapeHtml(data.action || 'respond') + '</div>',
-        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
-        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
-        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
-        deltas ? '<div class="agent-block"><strong>拟修改参数</strong><div class="deltas">' + deltas + '</div></div>' : '<div class="agent-block">本轮没有拟修改参数。</div>',
-        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : '',
-        suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
-      ].join(''))
-      chat.querySelectorAll('button[data-reply]').forEach(button => {
-        button.addEventListener('click', () => {
-          prompt.value = button.dataset.reply || ''
-          sendMessage()
-        })
-      })
-      if (data.action === 'tool_submitted' && data.apply?.jobId) {
-        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
       }
     }
 
@@ -983,8 +1017,7 @@
             setStatus(photoStatus, 'Lightroom 工具执行失败', 'warn')
             return
           }
-          const afterUrl = result.previewUrl || ''
-          setComparison(beforeUrl || lastBeforeUrl, afterUrl, currentPhoto?.photo?.fileName || '', '', jobId)
+          setComparison(beforeUrl || lastBeforeUrl, result.previewUrl || '', currentPhoto?.photo?.fileName || '', '', jobId)
           addMessage('agent', 'Lightroom 已完成调色。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
           setStatus(photoStatus, 'Lightroom 已完成调色', 'ok')
           await pollPhoto()
@@ -995,208 +1028,12 @@
       }, 1500)
     }
 
-    async function sendMessage() {
-      const message = prompt.value.trim()
-      if (!message) return
-      addMessage('user', escapeHtml(message))
-      send.disabled = true
-      setStatus(photoStatus, 'Agent 正在分析上下文...', '')
-      try {
-        const response = await fetch('/api/lightroom-agent/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, provider: provider.value, sessionId })
-        })
-        const result = await response.json()
-        if (!result.success) {
-          addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(result.message || '未知错误'))
-          return
-        }
-        sessionId = result.data.sessionId
-        renderAgentResult(result.data)
-        prompt.value = ''
-      } catch (error) {
-        addMessage('agent', '调用失败：' + escapeHtml(error.message))
-      } finally {
-        send.disabled = false
-      }
-    }
-
-    function renderAgentResult(data) {
-      const analysis = data.analysis || {}
-      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
-      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
-      analysisSummary.innerHTML = [
-        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
-        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
-        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
-      ].join('')
-      if (data.beforePreviewUrl || data.afterPreviewUrl) {
-        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
-      }
-      const toolText = data.action === 'tool_submitted'
-        ? '<div class="agent-block">我已经调用 Lightroom 工具，正在等待本地插件处理完成。</div>'
-        : ''
-      addMessage('agent', [
-        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
-        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
-        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
-        deltas ? '<div class="agent-block"><strong>修改参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
-        toolText,
-        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : ''
-      ].join(''))
-      if (data.action === 'tool_submitted' && data.apply?.jobId) {
-        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
-      }
-    }
-
-    function renderAgentResult(data) {
-      const analysis = data.analysis || {}
-      const thought = data.agentThought || {}
-      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
-      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
-      const localPlans = (data.localAdjustments || []).map(plan => {
-        const region = plan.region ? JSON.stringify(plan.region) : '-'
-        const settings = plan.settings ? JSON.stringify(plan.settings) : '{}'
-        return '<div class="delta"><strong>' + escapeHtml(plan.target || plan.type || '局部区域') + '</strong><span>' + escapeHtml(plan.type || '-') + ' / ' + escapeHtml(plan.coordinateSpace || 'normalized_crop') + '<br />区域：' + escapeHtml(region) + '<br />参数：' + escapeHtml(settings) + '<br />' + escapeHtml(plan.reason || '') + '</span></div>'
-      }).join('')
-      const capabilityText = data.capabilities?.supportsLocalMasks
-        ? 'Lightroom 当前支持执行局部蒙版。'
-        : '当前 Lightroom 插件暂不直接写入局部蒙版；以下内容是 Agent 的相对坐标蒙版计划。'
-      analysisSummary.innerHTML = [
-        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
-        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
-        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
-      ].join('')
-      if (data.beforePreviewUrl || data.afterPreviewUrl) {
-        setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
-      }
-      const toolText = data.action === 'tool_submitted'
-        ? '<div class="agent-block">我已经调用 Lightroom 全局调色工具，正在等待本地插件处理完成。</div>'
-        : ''
-      const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
-      addMessage('agent', [
-        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
-        renderAgentThought(thought, analysis),
-        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
-        deltas ? '<div class="agent-block"><strong>全局调色参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
-        localPlans ? '<div class="agent-block"><strong>局部蒙版计划</strong>\n' + escapeHtml(capabilityText) + '<div class="deltas">' + localPlans + '</div></div>' : '',
-        toolText,
-        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : '',
-        suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
-      ].join(''))
-      chat.querySelectorAll('button[data-reply]').forEach(button => {
-        button.addEventListener('click', () => {
-          prompt.value = button.dataset.reply || ''
-          sendMessage()
-        })
-      })
-      if (data.action === 'tool_submitted' && data.apply?.jobId) {
-        pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
-      }
-    }
-
-    function renderAgentThought(thought, analysis) {
-      const observations = (thought.observations || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
-      const toolPlan = (thought.toolPlan || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
-      return [
-        '<div class="agent-block">',
-        '<strong>主 Agent 判断</strong>',
-        thought.summary ? '\n' + escapeHtml(thought.summary) : '',
-        observations ? '\n\n<strong>观察到的线索</strong><ul>' + observations + '</ul>' : '',
-        thought.reasoningVisible ? '\n<strong>判断依据</strong>\n' + escapeHtml(thought.reasoningVisible) : '',
-        thought.decision ? '\n\n<strong>本轮决策</strong>\n' + escapeHtml(labelDecision(thought.decision)) : '',
-        thought.nextAction ? '\n\n<strong>下一步</strong>\n' + escapeHtml(thought.nextAction) : '',
-        toolPlan ? '\n\n<strong>准备使用的工具动作</strong><ul>' + toolPlan + '</ul>' : '',
-        (!thought.summary && !observations && !thought.reasoningVisible)
-          ? '\n<strong>意图</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-')
-          : '',
-        '</div>'
-      ].join('')
-    }
-
-    function labelDecision(decision) {
-      const labels = {
-        respond: '先回复分析，不直接修图',
-        ask_user: '需要用户补充选择',
-        apply_global_adjustments: '调用 Lightroom 全局调色',
-        plan_local_adjustments: '给出局部蒙版计划'
-      }
-      return labels[decision] || decision
-    }
-
-    function addThinkingMessage() {
-      const node = document.createElement('div')
-      node.className = 'message agent thinking-message'
-      node.innerHTML = [
-        '<span class="role">Agent</span>',
-        '<div class="thinking-card">',
-        '<div class="thinking-line"><span class="thinking-dot"></span><strong>思考中...</strong></div>',
-        '<div>我正在观察当前照片、理解你的意图，并判断是否需要查询知识库或调用 Lightroom 工具。</div>',
-        '</div>'
-      ].join('')
-      chat.appendChild(node)
-      chat.scrollTop = chat.scrollHeight
-      return node
-    }
-
-    function finishThinking(node, failed) {
-      if (!node) return
-      if (failed) {
-        node.classList.add('failed')
-        return
-      }
-      node.remove()
-    }
-
-    async function sendMessage() {
-      const message = prompt.value.trim()
-      if (!message) return
-      addMessage('user', escapeHtml(message))
-      prompt.value = ''
-      const thinking = addThinkingMessage()
-      send.disabled = true
-      setStatus(photoStatus, 'Agent 正在分析上下文...', '')
-      try {
-        const response = await fetch('/api/lightroom-agent/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, provider: provider.value, sessionId })
-        })
-        const result = await response.json()
-        if (!result.success) {
-          finishThinking(thinking, true)
-          addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(result.message || '未知错误'))
-          return
-        }
-        sessionId = result.data.sessionId
-        finishThinking(thinking, false)
-        renderAgentResult(result.data)
-      } catch (error) {
-        finishThinking(thinking, true)
-        addMessage('agent', '调用失败：' + escapeHtml(error.message))
-      } finally {
-        send.disabled = false
-      }
-    }
-
-    document.querySelectorAll('[data-prompt]').forEach(button => {
-      button.addEventListener('click', () => {
-        prompt.value = button.dataset.prompt || ''
-        sendMessage()
-      })
-    })
-    leftTabButtons.forEach(button => {
-      button.addEventListener('click', () => activateLeftTab(button.dataset.leftTab || 'photo'))
-    })
+    document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => { prompt.value = button.dataset.prompt || ''; sendMessage() }))
+    leftTabButtons.forEach(button => button.addEventListener('click', () => activateLeftTab(button.dataset.leftTab || 'photo')))
     provider.addEventListener('change', renderProviderConfig)
     saveRuntimeConfig.addEventListener('click', saveConfig)
     send.addEventListener('click', sendMessage)
-    prompt.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        sendMessage()
-      }
-    })
+    prompt.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) sendMessage() })
 
     loadRuntimeConfig()
     pollStatus()

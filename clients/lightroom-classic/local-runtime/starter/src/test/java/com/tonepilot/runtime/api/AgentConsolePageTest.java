@@ -54,6 +54,10 @@ class AgentConsolePageTest {
         assertThat(html).contains("addThinkingMessage");
         assertThat(html).contains("思考中");
         assertThat(html).contains("renderAgentThought");
+        assertThat(html).contains("/api/lightroom-agent/chat/stream");
+        assertThat(html).contains("appendReactEvent");
+        assertThat(html).contains("agent.thought");
+        assertThat(html).contains("agent.final");
         assertThat(html).doesNotContain("Agent 执行过程");
         assertThat(html).doesNotContain("读取 Lightroom 当前照片和调色上下文");
     }
