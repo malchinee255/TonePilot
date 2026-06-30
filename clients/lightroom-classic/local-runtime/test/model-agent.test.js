@@ -79,3 +79,71 @@ test('Qwen2 使用 OpenAI 兼容接口并返回 ReAct 决策和 developSettings'
   assert.deepStrictEqual(result.developSettings, { Highlights2012: -25 })
   assert.strictEqual(result.runtimeProvider, 'qwen2')
 })
+
+
+test('model HTTP error keeps ask_user decision and visible ReAct observation', async () => {
+  const result = await createModelTune({
+    payload: { provider: 'openai', message: 'make it cool cinematic', sessionId: 's-http-error' },
+    selected: { photo: { fileName: 'b.raw' }, currentAdjustment: { basic: { exposure: 0 } } },
+    analysis: { intent: 'cool cinematic look' },
+    config: {
+      provider: 'openai',
+      openai: { apiKey: 'sk-openai', baseUrl: 'https://openai.test/v1', model: 'gpt-test' }
+    },
+    fetchImpl: async () => ({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: { message: 'rate limit' } })
+    })
+  })
+
+  assert.strictEqual(result.success, false)
+  assert.strictEqual(result.sessionId, 's-http-error')
+  assert.strictEqual(result.agentThought.decision, 'ask_user')
+  assert.strictEqual(result.developSettings && Object.keys(result.developSettings).length, 0)
+  assert.strictEqual(result.reactTrace[0].action, 'call_chat_model')
+  assert.match(result.reactTrace[0].observation, /rate limit/)
+  assert.strictEqual(result.runtimeProvider, 'openai')
+})
+
+test('model result filters empty ReAct steps and keeps plan_local_adjustments decision', async () => {
+  const result = await createModelTune({
+    payload: { provider: 'qwen2', message: 'plan a sky mask', sessionId: 's-mask-plan' },
+    selected: { photo: { fileName: 'c.raw' }, currentAdjustment: { basic: {} } },
+    analysis: { intent: 'local sky adjustment' },
+    config: {
+      provider: 'qwen2',
+      qwen2: { apiKey: 'sk-qwen', baseUrl: 'https://qwen.test/v1', model: 'qwen-plus' }
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              assistantMessage: 'I will plan a local sky mask instead of applying global settings.',
+              agentThought: {
+                summary: 'The user asks for local sky editing.',
+                decision: 'plan_local_adjustments',
+                nextAction: 'Return mask region and parameter suggestions.'
+              },
+              reactTrace: [
+                { thought: '', action: '', observation: '' },
+                { thought: 'A local tool is required.', action: 'plan_mask_adjustment', observation: 'Generated a relative sky region.' }
+              ],
+              deltas: [],
+              developSettings: {}
+            })
+          }
+        }]
+      })
+    })
+  })
+
+  assert.strictEqual(result.success, true)
+  assert.strictEqual(result.agentThought.decision, 'plan_local_adjustments')
+  assert.strictEqual(result.reactTrace.length, 1)
+  assert.strictEqual(result.reactTrace[0].action, 'plan_mask_adjustment')
+  assert.deepStrictEqual(result.developSettings, {})
+})

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 本地完整依赖启动脚本：先启动 Docker Compose 基础设施，再让后端连接 MySQL、Redis、MinIO。
+# 本地完整依赖启动脚本：先启动 Docker Compose 基础设施，再让后端连接 MySQL、Redis、MinIO、Milvus。
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${ROOT_DIR}/logs"
@@ -10,8 +10,8 @@ BACKEND_LOG="${LOG_DIR}/backend-compose.log"
 cd "${ROOT_DIR}"
 mkdir -p "${LOG_DIR}"
 
-echo "启动 Docker Compose 依赖：MySQL、Redis、MinIO"
-docker compose up -d mysql redis minio
+echo "启动 Docker Compose 依赖：MySQL、Redis、MinIO、Milvus"
+docker compose up -d mysql redis minio etcd milvus
 
 echo "等待 MySQL 就绪"
 for attempt in {1..40}; do
@@ -34,7 +34,7 @@ if command -v ss >/dev/null 2>&1 && ss -ltnp | grep -q ":8080 "; then
   fi
 fi
 
-echo "启动后端，连接 Docker Compose 的 MySQL、Redis、MinIO"
+echo "启动后端，连接 Docker Compose 的 MySQL、Redis、MinIO、Milvus"
 cd "${ROOT_DIR}/tonepilot-admin/backend"
 
 export TONEPILOT_DB_URL="jdbc:mysql://localhost:3306/tonepilot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
@@ -53,6 +53,10 @@ export MINIO_ENDPOINT="http://localhost:9000"
 export MINIO_ACCESS_KEY="tonepilot"
 export MINIO_SECRET_KEY="tonepilot123"
 export MINIO_BUCKET="tonepilot"
+
+export TONEPILOT_VECTOR_STORE="milvus"
+export MILVUS_URI="http://localhost:19530"
+export MILVUS_COLLECTION="tonepilot_knowledge"
 
 : > "${BACKEND_LOG}"
 setsid nohup mvn spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &

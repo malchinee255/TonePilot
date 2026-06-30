@@ -63,7 +63,7 @@ http://localhost:5173
 只启动基础设施：
 
 ```bash
-docker compose up -d redis mysql minio
+docker compose up -d redis mysql minio etcd milvus
 ```
 
 依赖用途：
@@ -71,6 +71,7 @@ docker compose up -d redis mysql minio
 - Redis：保存多 Agent 工作流上下文和 trace，支持分布式内存与服务重启后的上下文恢复。
 - MySQL：生产形态关系数据库。开发时可用 H2 文件数据库。
 - MinIO：本地模拟 OSS，用于管理端样片等文件对象存储。
+- Milvus：向量数据库，用于调色知识库的向量检索和后续混合检索扩展。
 
 ## Lightroom 插件端
 

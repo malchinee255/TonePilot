@@ -41,6 +41,23 @@ tonepilot:
       bucket: tonepilot
   rag:
     default-top-k: 5
+    hybrid:
+      enabled: true
+      keyword-weight: 0.45
+      vector-weight: 0.45
+      rerank-weight: 0.10
+      embedding:
+        provider: openai
+        model: text-embedding-3-small
+        dimensions: 1536
+      vector-store:
+        # memory / milvus。本地 Docker Compose 使用 milvus。
+        type: milvus
+        milvus-uri: http://localhost:19530
+        collection: tonepilot_knowledge
+      rerank:
+        provider: none
+        model:
   ai:
     # rule / openai / qwen2
     provider: rule
