@@ -17,8 +17,19 @@
 
 ```text
 clients/lightroom-classic/
-├── local-runtime/  本地运行时、Agent 控制台、安装脚本和测试
+├── local-runtime/  本地运行时 Maven 聚合工程
 └── plugin/         Lightroom Classic Lua 插件源码
+```
+
+## Maven 模块
+
+```text
+local-runtime/
+├── domain/          Agent 会话和值对象
+├── repository/      Lightroom 文件桥接端口
+├── infrastructure/  模型、Bridge 文件协议、观测和管理端客户端
+├── application/     Agent 对话、Lightroom 用例服务和本地 API
+└── starter/         启动类、配置、静态控制台和测试
 ```
 
 ## 安装插件
@@ -109,6 +120,5 @@ curl -X POST http://127.0.0.1:33335/api/lightroom-agent/chat \
 ## 验证
 
 ```bash
-npm test
-npm run check
+mvn test
 ```

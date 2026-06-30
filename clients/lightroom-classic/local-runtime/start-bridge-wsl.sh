@@ -38,4 +38,4 @@ echo "[TonePilot Local Runtime] 运行时目录: ${TONEPILOT_LIGHTROOM_BRIDGE_RO
 echo "[TonePilot Local Runtime] Lightroom 任务目录: ${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT}"
 echo "[TonePilot Local Runtime] 监听地址: ${TONEPILOT_LIGHTROOM_BRIDGE_PUBLIC_URL}"
 
-mvn spring-boot:run
+mvn -pl starter -am spring-boot:run

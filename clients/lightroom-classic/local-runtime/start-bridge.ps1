@@ -9,4 +9,4 @@ if (-not $env:TONEPILOT_LIGHTROOM_BRIDGE_PORT) {
 
 Write-Host "Starting TonePilot Java Local Runtime..."
 Write-Host "Default URL: http://127.0.0.1:$env:TONEPILOT_LIGHTROOM_BRIDGE_PORT"
-mvn spring-boot:run
+mvn -pl starter -am spring-boot:run

@@ -43,7 +43,7 @@ http://localhost:8080
 
 ```bash
 cd tonepilot-admin/backend
-mvn spring-boot:run
+mvn -pl starter -am spring-boot:run
 ```
 
 启动管理端：
@@ -142,14 +142,13 @@ Lightroom 选中照片
   -> Lightroom 显示真实修图结果
 ```
 
-因此它的核心文件集中在：
+因此它的核心模块集中在：
 
-- `server.js`：启动本地 HTTP 服务。
-- `src/bridge-runtime.js`：Lightroom 文件协议、Agent 控制台和本地 API。
-- `src/local-rule-agent.js`：完全离线可用的规则 Agent。
-- `src/model-agent.js`：OpenAI / Qwen 的 OpenAI 兼容接口适配。
-- `src/runtime-config.js`：保存在本机的模型配置。
-- `test/`：Local Runtime 行为测试。
+- `domain/`：Agent 会话和值对象。
+- `repository/`：Lightroom 文件桥接端口。
+- `infrastructure/`：Lightroom 文件协议、模型适配、观测日志和管理端客户端。
+- `application/`：本地 API、Agent 对话编排、Lightroom 状态和工具用例。
+- `starter/`：Spring Boot 启动类、配置、深灰 Agent 控制台和测试。
 
 ## 当前修图能力
 
@@ -176,8 +175,8 @@ Lightroom 选中照片
 
 ```bash
 cd <项目目录>/tonepilot-admin/backend
-cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-mvn spring-boot:run -Dspring-boot.run.profiles=local
+cp starter/src/main/resources/application-local.yml.example starter/src/main/resources/application-local.yml
+mvn -pl starter -am spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 然后在 `application-local.yml` 里填写 `tonepilot.ai.openai` 或 `tonepilot.ai.qwen2`。
@@ -207,23 +206,21 @@ export QWEN2_VISION_MODEL=你的_Qwen2_视觉模型
 ```text
 TonePilot/
 ├── tonepilot-admin/                 云端管理端工程
-│   ├── backend/                     Spring Boot 管理端后端
-│   │   ├── agent/                   规则模式和模型版 Agent 适配
-│   │   ├── ai/                      LangChain4j 与 OpenAI 兼容模型客户端
-│   │   ├── colorgrading/domain/     调色参数和值对象
-│   │   ├── domain/                  照片、风格、样片、知识等通用领域对象
-│   │   ├── evaluation/              自动评测
-│   │   ├── observability/           LLM 调用日志和审计事件
-│   │   ├── persistence/             数据库快照和恢复
-│   │   ├── service/                 管理端、RAG、样片、风格等业务服务
-│   │   ├── web/                     管理端、评测和观测 API
-│   │   └── workflow/                多 Agent 编排、上下文和 trace
+│   ├── backend/                     Spring Boot 管理端后端 Maven 聚合工程
+│   │   ├── domain/                  领域模型、领域规则和领域上下文
+│   │   ├── repository/              Repository 接口和持久化端口
+│   │   ├── infrastructure/          LLM、RAG、存储、数据库、观测等基础设施实现
+│   │   ├── application/             Controller、DTO、用例服务和 Agent 编排
+│   │   └── starter/                 启动类、全局配置、切面、资源和集成测试
 │   └── frontend/                    Vue 3 管理端前端
 ├── clients/
 │   └── lightroom-classic/
-│       ├── local-runtime/           本地运行时、Agent 控制台、安装脚本和测试
-│       │   ├── server.js            本地运行时启动入口
-│       │   └── src/                 模型适配、Lightroom 文件协议
+│       ├── local-runtime/           本地运行时 Maven 聚合工程
+│       │   ├── domain/              Agent 会话和值对象
+│       │   ├── repository/          Lightroom 文件桥接端口
+│       │   ├── infrastructure/      模型、Bridge 文件协议、观测和管理端客户端
+│       │   ├── application/         Agent 对话、Lightroom 用例服务和本地 API
+│       │   └── starter/             启动类、配置、静态控制台和测试
 │       └── plugin/                  Lightroom Classic Lua 插件源码
 ├── docs/                            架构说明
 ├── scripts/                         本地启动脚本
@@ -293,6 +290,5 @@ Local Runtime 测试：
 
 ```bash
 cd <项目目录>/clients/lightroom-classic/local-runtime
-npm test
-npm run check
+mvn test
 ```

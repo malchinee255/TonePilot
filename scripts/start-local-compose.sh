@@ -59,7 +59,7 @@ export MILVUS_URI="http://localhost:19530"
 export MILVUS_COLLECTION="tonepilot_knowledge"
 
 : > "${BACKEND_LOG}"
-setsid nohup mvn spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &
+setsid nohup mvn -pl starter -am spring-boot:run > "${BACKEND_LOG}" 2>&1 < /dev/null &
 echo "$!" > "${LOG_DIR}/backend-compose.pid"
 echo "后端启动中，日志：${BACKEND_LOG}"
 echo "后端进程 PID 文件：${LOG_DIR}/backend-compose.pid"
