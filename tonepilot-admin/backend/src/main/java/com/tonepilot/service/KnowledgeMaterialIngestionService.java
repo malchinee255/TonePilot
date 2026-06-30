@@ -1,12 +1,16 @@
 package com.tonepilot.service;
 
 import com.tonepilot.common.NotFoundException;
+import com.tonepilot.ai.AiProperties;
+import com.tonepilot.ai.OpenAiCompatibleModelClient;
+import com.tonepilot.ai.dto.StyleKnowledgeModelOutput;
 import com.tonepilot.domain.KnowledgeExtractionJob;
 import com.tonepilot.domain.KnowledgeMaterial;
 import com.tonepilot.domain.KnowledgeSource;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.persistence.DomainSnapshotRepository;
 import com.tonepilot.store.InMemoryTonePilotStore;
+import com.tonepilot.web.dto.DouyinImportRequest;
 import com.tonepilot.web.dto.KnowledgeMaterialRequest;
 import com.tonepilot.web.dto.KnowledgeSourceRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +32,15 @@ public class KnowledgeMaterialIngestionService {
 
     @Autowired
     private DomainSnapshotRepository snapshotRepository;
+
+    @Autowired
+    private DouyinTranscriptService douyinTranscriptService;
+
+    @Autowired
+    private AiProperties aiProperties;
+
+    @Autowired
+    private OpenAiCompatibleModelClient modelClient;
 
     public KnowledgeSource createSource(KnowledgeSourceRequest request) {
         Instant now = Instant.now();
@@ -80,19 +93,29 @@ public class KnowledgeMaterialIngestionService {
                 .toList();
     }
 
+    public KnowledgeExtractionJob importDouyinVideo(DouyinImportRequest request) {
+        KnowledgeSource source = createSource(new KnowledgeSourceRequest(
+                "douyin_video",
+                trimOrDefault(request.title(), "抖音调色教程"),
+                trimOrDefault(request.author(), "未知作者"),
+                trimOrDefault(request.videoUrl(), ""),
+                request.styleId(),
+                trimOrDefault(request.notes(), "")
+        ));
+        String transcript = douyinTranscriptService.extractTranscript(request);
+        KnowledgeMaterial material = importMaterial(source.id(), new KnowledgeMaterialRequest(
+                "transcript",
+                source.title() + " 字幕/摘要",
+                transcript,
+                "zh-CN"
+        ));
+        return extractToKnowledge(source.id(), material.id());
+    }
+
     public KnowledgeExtractionJob extractToKnowledge(Long sourceId, Long materialId) {
         KnowledgeSource source = getSource(sourceId);
         KnowledgeMaterial material = getMaterial(source.id(), materialId);
-        StyleKnowledge knowledge = styleKnowledgeService.createDraftFromMaterial(
-                source.styleId(),
-                source.title() + " - " + material.title(),
-                inferScene(source, material),
-                inferTargetStyle(source),
-                inferProblems(material),
-                inferStrategy(material),
-                inferParamRanges(material),
-                buildKnowledgeContent(source, material)
-        );
+        StyleKnowledge knowledge = createDraftKnowledge(source, material);
         Instant now = Instant.now();
         KnowledgeExtractionJob job = new KnowledgeExtractionJob(
                 store.knowledgeExtractionJobIds.getAndIncrement(),
@@ -107,6 +130,50 @@ public class KnowledgeMaterialIngestionService {
         store.knowledgeExtractionJobs.put(job.id(), job);
         snapshotRepository.save("knowledge_extraction_job", job.id(), job);
         return job;
+    }
+
+    private StyleKnowledge createDraftKnowledge(KnowledgeSource source, KnowledgeMaterial material) {
+        if (aiProperties.modelEnabled()) {
+            try {
+                String json = modelClient.completeJson(
+                        "你是 TonePilot 调色知识抽取 Agent，只输出严格 JSON。",
+                        """
+                                请从下面的调色素材中抽取一条可审核、可检索的摄影调色知识。
+                                字段必须为 title, scene, problems, targetStyle, strategy, paramRanges, content。
+                                要保留来源信息，不要承诺复刻某个博主或盗用预设。
+
+                                来源：
+                                %s
+
+                                素材：
+                                %s
+                                """.formatted(buildSourceSummary(source), material.content())
+                );
+                StyleKnowledgeModelOutput output = modelClient.readJson(json, StyleKnowledgeModelOutput.class);
+                return styleKnowledgeService.createDraftFromMaterial(
+                        source.styleId(),
+                        trimOrDefault(output.title(), source.title() + " - " + material.title()),
+                        trimOrDefault(output.scene(), inferScene(source, material)),
+                        trimOrDefault(output.targetStyle(), inferTargetStyle(source)),
+                        output.problems() == null ? inferProblems(material) : output.problems(),
+                        output.strategy() == null ? inferStrategy(material) : output.strategy(),
+                        output.paramRanges() == null ? inferParamRanges(material) : output.paramRanges(),
+                        buildKnowledgeContent(source, material) + "\n\n模型抽取：\n" + trimOrDefault(output.content(), "")
+                );
+            } catch (Exception ignored) {
+                // 模型抽取失败时保留导入链路，生成待审核草稿，由管理员人工修正。
+            }
+        }
+        return styleKnowledgeService.createDraftFromMaterial(
+                source.styleId(),
+                source.title() + " - " + material.title(),
+                inferScene(source, material),
+                inferTargetStyle(source),
+                inferProblems(material),
+                inferStrategy(material),
+                inferParamRanges(material),
+                buildKnowledgeContent(source, material)
+        );
     }
 
     private KnowledgeSource getSource(Long sourceId) {
@@ -200,6 +267,22 @@ public class KnowledgeMaterialIngestionService {
                 material.title(),
                 material.language(),
                 material.content()
+        ).trim();
+    }
+
+    private String buildSourceSummary(KnowledgeSource source) {
+        return """
+                来源类型：%s
+                来源标题：%s
+                作者：%s
+                原始链接：%s
+                备注：%s
+                """.formatted(
+                source.sourceType(),
+                source.title(),
+                source.author(),
+                source.originalUrl(),
+                source.notes()
         ).trim();
     }
 

@@ -234,7 +234,8 @@ public class ModelRuntimeAgent {
 
     private String userPrompt(AgentInput input) {
         return "用户意图：\n" + input.message()
-                + "\n\n当前 Lightroom 参数：\n" + safeJson(input.currentSettings());
+                + "\n\n当前 Lightroom 参数：\n" + safeJson(input.currentSettings())
+                + "\n\n管理端知识库匹配：\n" + safeJson(input.knowledgeMatches());
     }
 
     private String safeJson(Object value) {

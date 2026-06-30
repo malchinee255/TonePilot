@@ -27,6 +27,9 @@ public class StyleKnowledgeService {
     private final KnowledgeGenerationAgent knowledgeGenerationAgent;
 
     @Autowired
+    private KnowledgeVectorIndexService vectorIndexService;
+
+    @Autowired
     public StyleKnowledgeService(
             InMemoryTonePilotStore store,
             StyleService styleService,
@@ -174,6 +177,9 @@ public class StyleKnowledgeService {
                 Instant.now()
         );
         store.styleKnowledge.put(id, updated);
+        if ("approved".equals(status)) {
+            vectorIndexService.indexStyleKnowledge(updated);
+        }
         return updated;
     }
 

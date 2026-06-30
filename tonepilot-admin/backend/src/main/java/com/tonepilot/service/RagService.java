@@ -3,6 +3,7 @@ package com.tonepilot.service;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.tonepilot.domain.ColorKnowledge;
+import com.tonepilot.domain.KnowledgeChunk;
 import com.tonepilot.domain.StyleKnowledge;
 import com.tonepilot.store.InMemoryTonePilotStore;
 import com.tonepilot.web.dto.RagSearchItem;
@@ -12,21 +13,39 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RagService {
 
     private final InMemoryTonePilotStore store;
     private final int defaultTopK;
+    private final KnowledgeVectorIndexService vectorIndexService;
 
     @Autowired
-    public RagService(InMemoryTonePilotStore store, @Value("${tonepilot.rag.default-top-k:5}") int defaultTopK) {
+    public RagService(
+            InMemoryTonePilotStore store,
+            KnowledgeVectorIndexService vectorIndexService,
+            @Value("${tonepilot.rag.default-top-k:5}") int defaultTopK
+    ) {
         this.store = store;
+        this.vectorIndexService = vectorIndexService;
         this.defaultTopK = defaultTopK;
     }
 
     public List<RagSearchItem> retrieve(String query, int topK) {
         List<RagSearchItem> items = new ArrayList<>();
+        Map<String, Double> queryVector = vectorIndexService.embed(query);
+
+        for (KnowledgeChunk chunk : store.knowledgeChunks.values()) {
+            double score = Math.max(
+                    score(query, chunk.content()),
+                    vectorIndexService.cosine(queryVector, chunk.embedding())
+            );
+            if (score > 0) {
+                items.add(new RagSearchItem(chunk.sourceType(), chunk.sourceId(), chunk.title(), score, chunk.content()));
+            }
+        }
 
         for (ColorKnowledge knowledge : store.knowledge.values()) {
             String corpus = String.join(" ", knowledge.title(), knowledge.scene(), knowledge.targetStyle(), knowledge.content());
@@ -49,7 +68,7 @@ public class RagService {
 
         return items.stream()
                 .sorted(Comparator.comparing(RagSearchItem::score).reversed())
-                .limit(topK)
+                .limit(topK <= 0 ? defaultTopK : topK)
                 .toList();
     }
 

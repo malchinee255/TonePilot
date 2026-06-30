@@ -50,6 +50,10 @@ tonepilot:
       bucket: ${MINIO_BUCKET:tonepilot}
   rag:
     default-top-k: 5
+  ingestion:
+    douyin:
+      command: ${TONEPILOT_DOUYIN_IMPORT_COMMAND:}
+      timeout-seconds: ${TONEPILOT_DOUYIN_IMPORT_TIMEOUT_SECONDS:120}
   ai:
     provider: ${TONEPILOT_AI_PROVIDER:rule}
     fallback-enabled: ${TONEPILOT_AI_FALLBACK_ENABLED:true}

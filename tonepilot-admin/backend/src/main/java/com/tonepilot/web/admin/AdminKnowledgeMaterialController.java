@@ -5,6 +5,7 @@ import com.tonepilot.domain.KnowledgeExtractionJob;
 import com.tonepilot.domain.KnowledgeMaterial;
 import com.tonepilot.domain.KnowledgeSource;
 import com.tonepilot.service.KnowledgeMaterialIngestionService;
+import com.tonepilot.web.dto.DouyinImportRequest;
 import com.tonepilot.web.dto.KnowledgeMaterialRequest;
 import com.tonepilot.web.dto.KnowledgeSourceRequest;
 import jakarta.validation.Valid;
@@ -29,6 +30,11 @@ public class AdminKnowledgeMaterialController {
     @PostMapping
     public ApiResponse<KnowledgeSource> createSource(@Valid @RequestBody KnowledgeSourceRequest request) {
         return ApiResponse.ok(ingestionService.createSource(request));
+    }
+
+    @PostMapping("/douyin-imports")
+    public ApiResponse<KnowledgeExtractionJob> importDouyinVideo(@Valid @RequestBody DouyinImportRequest request) {
+        return ApiResponse.ok(ingestionService.importDouyinVideo(request));
     }
 
     @GetMapping("/{sourceId}/materials")

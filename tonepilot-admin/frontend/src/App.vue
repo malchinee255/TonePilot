@@ -184,6 +184,26 @@
             <el-button :icon="Refresh" @click="loadKnowledgeSources">刷新来源</el-button>
           </div>
 
+          <el-form label-position="top" class="inline-import">
+            <el-form-item label="抖音视频链接">
+              <el-input v-model="douyinForm.videoUrl" placeholder="粘贴抖音作品链接，生成待审核调色知识" />
+            </el-form-item>
+            <el-form-item label="标题">
+              <el-input v-model="douyinForm.title" placeholder="例如：城市夜景电影感教程" />
+            </el-form-item>
+            <el-form-item label="作者">
+              <el-input v-model="douyinForm.author" placeholder="可选" />
+            </el-form-item>
+            <el-form-item label="备注/已知调色步骤">
+              <el-input v-model="douyinForm.notes" type="textarea" :rows="3" placeholder="可粘贴视频摘要、字幕或你观察到的调色步骤" />
+            </el-form-item>
+            <el-button :icon="Upload" type="primary" :loading="importingDouyin" @click="importDouyinVideo">
+              导入抖音并生成知识
+            </el-button>
+          </el-form>
+
+          <el-divider />
+
           <el-table :data="knowledgeSources" height="180" highlight-current-row @row-click="selectKnowledgeSource">
             <el-table-column prop="title" label="来源" min-width="180" />
             <el-table-column prop="sourceType" label="类型" width="150" />
@@ -356,6 +376,7 @@ const auditEvents = ref<any[]>([])
 const knowledgeStatus = ref('')
 const selectedSourceId = ref<number | undefined>()
 const extractingMaterialId = ref<number | undefined>()
+const importingDouyin = ref(false)
 const sampleFile = ref<File | undefined>()
 const benchmarkSummary = ref('')
 
@@ -389,6 +410,14 @@ const materialForm = reactive({
   title: '字幕摘要',
   content: '',
   language: 'zh-CN'
+})
+
+const douyinForm = reactive({
+  videoUrl: '',
+  title: '抖音调色教程',
+  author: '',
+  notes: '',
+  styleId: undefined as number | undefined
 })
 
 const sampleForm = reactive({
@@ -428,6 +457,7 @@ watch(activeView, async value => {
 function selectStyle(row: any) {
   sampleForm.styleId = row.id
   sourceForm.styleId = row.id
+  douyinForm.styleId = row.id
 }
 
 async function createStyle() {
@@ -542,6 +572,29 @@ async function importKnowledgeMaterial() {
   materialForm.content = ''
   ElMessage.success('素材已导入')
   await loadKnowledgeMaterials(selectedSourceId.value)
+}
+
+async function importDouyinVideo() {
+  if (!douyinForm.videoUrl.trim()) {
+    ElMessage.warning('请先填写抖音视频链接')
+    return
+  }
+  importingDouyin.value = true
+  try {
+    const job = await unwrap<any>(api.post('/api/admin/knowledge-sources/douyin-imports', {
+      videoUrl: douyinForm.videoUrl,
+      title: douyinForm.title,
+      author: douyinForm.author,
+      styleId: douyinForm.styleId || sourceForm.styleId,
+      notes: douyinForm.notes
+    }))
+    ElMessage.success(`已生成待审核知识 #${job.generatedKnowledgeId}`)
+    douyinForm.videoUrl = ''
+    douyinForm.notes = ''
+    await Promise.all([loadKnowledgeSources(), loadAdminKnowledge()])
+  } finally {
+    importingDouyin.value = false
+  }
 }
 
 async function extractKnowledge(materialId: number) {

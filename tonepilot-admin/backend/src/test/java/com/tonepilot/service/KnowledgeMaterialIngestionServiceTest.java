@@ -53,4 +53,24 @@ class KnowledgeMaterialIngestionServiceTest {
         assertThat(knowledge.content()).contains("来源类型：douyin_video");
         assertThat(knowledge.content()).contains("夜景照片先压高光");
     }
+
+    @Test
+    void importsDouyinLinkAsIngestionJobAndCreatesPendingKnowledge() {
+        KnowledgeExtractionJob job = service.importDouyinVideo(new com.tonepilot.web.dto.DouyinImportRequest(
+                "https://www.douyin.com/video/123456",
+                "城市夜景蓝橙电影感教程",
+                "调色博主",
+                1L,
+                "教程提到压高光、提阴影、降低绿色饱和度。"
+        ));
+
+        assertThat(job.status()).isEqualTo("succeeded");
+        assertThat(job.generatedKnowledgeId()).isNotNull();
+
+        StyleKnowledge knowledge = styleKnowledgeService.get(job.generatedKnowledgeId());
+        assertThat(knowledge.status()).isEqualTo("pending");
+        assertThat(knowledge.scene()).isEqualTo("夜景");
+        assertThat(knowledge.content()).contains("https://www.douyin.com/video/123456");
+        assertThat(knowledge.content()).contains("教程提到压高光");
+    }
 }

@@ -69,8 +69,10 @@ public class RuntimeAgentOrchestrator {
         Map<String, Object> runtimeConfig = configService.readInternalConfig();
         String provider = String.valueOf(payload.getOrDefault("provider", runtimeConfig.getOrDefault("provider", "qwen2")));
         traceLogger.info("agent.provider.selected", sessionId, Map.of("provider", provider));
+        List<Map<String, Object>> knowledgeMatches = knowledgeMatches(message, runtimeConfig);
+        traceLogger.info("agent.knowledge.retrieved", sessionId, Map.of("matchCount", knowledgeMatches.size()));
 
-        AgentInput agentInput = new AgentInput(message, currentAdjustment);
+        AgentInput agentInput = new AgentInput(message, currentAdjustment, knowledgeMatches);
         AgentTuneResult tuneResult;
         try {
             tuneResult = modelAgent.plan(agentInput, provider, runtimeConfig);
@@ -90,7 +92,7 @@ public class RuntimeAgentOrchestrator {
 
         Map<String, Object> data = baseData(sessionId, selected, tuneResult);
         data.put("beforePreviewUrl", String.valueOf(selected.getOrDefault("baselinePreviewUrl", selected.getOrDefault("previewUrl", ""))));
-        data.put("knowledgeMatches", knowledgeMatches(runtimeConfig));
+        data.put("knowledgeMatches", knowledgeMatches);
 
         if (shouldApply(message, tuneResult)) {
             Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
@@ -164,9 +166,14 @@ public class RuntimeAgentOrchestrator {
         return data;
     }
 
-    private List<Map<String, Object>> knowledgeMatches(Map<String, Object> runtimeConfig) {
+    private List<Map<String, Object>> knowledgeMatches(String message, Map<String, Object> runtimeConfig) {
         Object knowledge = runtimeConfig.get("knowledge");
         boolean enabled = knowledge instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get("enabled"));
+        List<Map<String, Object>> remoteMatches = adminRuntimeClient.retrieveKnowledge(message, 5);
+        remoteMatches = remoteMatches == null ? List.of() : remoteMatches;
+        if (!remoteMatches.isEmpty()) {
+            return remoteMatches;
+        }
         if (!enabled) {
             return List.of(Map.of(
                     "title", "本地知识库未启用",

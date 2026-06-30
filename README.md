@@ -14,7 +14,7 @@ TonePilot 是一个非生成式 AI 摄影调色 Agent。它不直接生成图片
 ```text
 Lightroom Classic 插件
   -> TonePilot Local Runtime（本地 Java Agent）
-      -> 本地规则 / 用户配置的大模型 / 可选管理端模型代理
+      -> 用户配置的大模型 / 可选管理端知识检索 / 可选管理端模型代理
       -> Lightroom 文件桥接任务
   -> TonePilot Admin（云端管理端）
       -> 用户、设备、知识库、配置、会话、Trace、工具调用记录
@@ -101,8 +101,9 @@ Lightroom 选中照片
   -> Lua 插件写入 selected-photo.json、selected-preview.jpg 和当前 Develop Settings
   -> Local Runtime 读取当前照片状态
   -> 用户在 Agent 控制台输入修图意图
-  -> Local Runtime 执行意图分析、照片类型判断、调色策略规划
-  -> Local Runtime 使用本地规则、OpenAI、Qwen 或管理端模型代理生成本轮参数
+  -> 主 Agent 自主观察照片、上下文、知识库匹配和可用工具
+  -> 主 Agent 决定回复分析、追问用户、规划局部蒙版或调用 Lightroom 全局调色工具
+  -> Local Runtime 使用 OpenAI、Qwen 或管理端模型代理生成本轮参数
   -> 参数校验，只输出需要修改的 Develop Settings
   -> Local Runtime 写入 apply-jobs
   -> Lua 插件调用 photo:applyDevelopSettings
@@ -122,23 +123,26 @@ Lightroom 选中照片
 - 自动评估、统计分析和可观测性。
 - MySQL、Redis、MinIO 等服务端存储。
 
-管理端不直接控制用户本地 Lightroom，也不是用户日常修图的强依赖。离线模式下，本地 Runtime 仍可用规则模式完成基础调色。
+管理端不直接控制用户本地 Lightroom，也不是用户日常修图的强依赖。离线模式下，本地 Runtime 可以只使用用户本机配置的大模型；管理端知识库是可选增强。
 
 ## 调色素材导入
 
-管理端新增“素材导入”入口，用来把外部调色经验沉淀成可审核知识。第一版支持先登记知识来源，再导入文本或参数类素材，最后生成待审核知识：
+管理端新增“素材导入”入口，用来把外部调色经验沉淀成可审核知识。当前支持手工素材导入，也支持抖音视频链接导入：
 
 ```text
-知识来源
-  -> 素材内容
-      -> 抽取任务
-          -> 待审核知识
-              -> 审核通过后进入运行时 RAG 检索
+抖音链接 / 手工素材
+  -> 来源登记
+  -> 字幕/摘要/参数文本素材
+  -> 知识抽取任务
+  -> 待审核知识
+  -> 审核通过
+  -> Chunk + 本地向量索引
+  -> 本地 Runtime 可选检索引用
 ```
 
 当前支持的来源类型：
 
-- `douyin_video`：抖音调色教程，先保存链接和字幕/摘要文本。
+- `douyin_video`：抖音调色教程，可输入视频链接和备注；配置外部命令后可自动提取字幕/摘要。
 - `master_edit_record`：大师调色记录，可导入参数变化、Lightroom 参数或调色说明。
 - `manual_note`：人工整理的调色笔记。
 - `style_sample`：风格样片相关说明。
@@ -152,7 +156,22 @@ Lightroom 选中照片
 - `xmp`：XMP 片段。
 - `manual_text`：手工文本。
 
-说明：抖音视频自动抓取器属于后续连接器能力，本阶段先完成“链接 + 字幕/摘要/参数文本”的最小闭环，保证素材可以进入审核池并被管理端追踪来源。
+抖音外部工具配置：
+
+```bash
+export TONEPILOT_DOUYIN_IMPORT_COMMAND='python /path/to/video-to-subtitle-summary-skill/main.py {url}'
+export TONEPILOT_DOUYIN_IMPORT_TIMEOUT_SECONDS=120
+```
+
+如果未配置命令，管理端会用视频链接、标题和备注生成一条可审核素材，方便本地先跑通入库流程。
+
+本地 Runtime 调用管理端知识库：
+
+```bash
+export TONEPILOT_ADMIN_BASE_URL=http://localhost:8080
+```
+
+配置后，用户端 Agent 每轮对话会调用 `POST /api/rag/retrieve` 检索已审核知识，并把匹配片段交给主 Agent 判断是否采用。
 
 ## 项目结构
 
@@ -203,9 +222,11 @@ TonePilot/
 
 - `GET /api/admin/knowledge-sources`
 - `POST /api/admin/knowledge-sources`
+- `POST /api/admin/knowledge-sources/douyin-imports`
 - `GET /api/admin/knowledge-sources/{sourceId}/materials`
 - `POST /api/admin/knowledge-sources/{sourceId}/materials`
 - `POST /api/admin/knowledge-sources/{sourceId}/materials/{materialId}/extract`
+- `POST /api/rag/retrieve`
 
 管理端观测与评估：
 

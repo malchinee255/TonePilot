@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -155,6 +156,35 @@ class RuntimeAgentOrchestratorTest {
         assertThat(result).containsEntry("success", false);
         assertThat(result.get("message")).isEqualTo("模型配置不完整，请先填写 API Key。");
         verify(context.toolService, never()).applyDevelopSettings(anyMap());
+    }
+
+    @Test
+    void passesAdminKnowledgeMatchesIntoModelInput() {
+        TestContext context = new TestContext();
+        context.lightroomAvailable();
+        context.qwenSelected();
+        when(context.adminRuntimeClient.retrieveKnowledge("夜景电影感", 5)).thenReturn(List.of(Map.of(
+                "title", "夜景高光控制",
+                "content", "夜景照片先压高光，再提阴影保护灯光层次。",
+                "score", 0.92
+        )));
+        when(context.modelAgent.plan(any(), eq("qwen2"), anyMap())).thenReturn(new AgentTuneResult(
+                "我会参考夜景高光控制知识给出建议。",
+                Map.of(),
+                List.of(),
+                Map.of("intent", "夜景电影感", "photoType", "夜景", "recommendedStyle", "压高光提阴影")
+        ));
+
+        context.orchestrator.chat(Map.of(
+                "message", "夜景电影感",
+                "provider", "qwen2",
+                "sessionId", "session-knowledge"
+        ));
+
+        var captor = forClass(AgentInput.class);
+        verify(context.modelAgent).plan(captor.capture(), eq("qwen2"), anyMap());
+        assertThat(captor.getValue().knowledgeMatches()).hasSize(1);
+        assertThat(captor.getValue().knowledgeMatches().get(0).get("title")).isEqualTo("夜景高光控制");
     }
 
     private static class TestContext {
