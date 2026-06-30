@@ -240,7 +240,7 @@ git push
 ### Task 4: Documentation and final verification
 
 **Files:**
-- Modify: `TonePilot-scaffold/README.md`
+- Modify: `README.md`
 
 - [ ] **Step 1: Document material ingestion**
 

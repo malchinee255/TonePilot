@@ -24,3 +24,35 @@ test('local compose launcher starts Milvus and injects vector store settings', (
   assert.match(script, /MILVUS_URI="http:\/\/localhost:19530"/)
   assert.match(script, /MySQL、Redis、MinIO、Milvus/)
 })
+
+
+test('tracked project files do not expose personal absolute paths', () => {
+  const { execFileSync } = require('child_process')
+  const files = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean)
+  const userName = 'lvchang' + 'hong'
+  const legacyProjectName = 'TonePilot-' + 'scaffold'
+  const legacyWorkspaceName = '摄影' + '调色agent'
+  const forbidden = [
+    new RegExp('/' + 'home/' + userName, 'i'),
+    new RegExp('/mnt/c/' + 'Users/' + userName, 'i'),
+    new RegExp('C:' + '\\Users\\' + userName, 'i'),
+    new RegExp('C:' + '/Users/' + userName, 'i'),
+    new RegExp(userName, 'i'),
+    new RegExp(legacyProjectName, 'i'),
+    new RegExp(legacyWorkspaceName)
+  ]
+  const offenders = []
+
+  for (const file of files) {
+    const fullPath = path.join(repoRoot, file)
+    if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) continue
+    const content = fs.readFileSync(fullPath, 'utf8')
+    if (forbidden.some((pattern) => pattern.test(content))) {
+      offenders.push(file)
+    }
+  }
+
+  assert.deepStrictEqual(offenders, [])
+})

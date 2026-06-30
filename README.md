@@ -16,14 +16,14 @@ TonePilot 是一个非生成式 AI 摄影调色 Agent。系统不直接生成图
 - 管理端：Web 管理台，用于维护调色风格、样片、知识库、审核状态、可观测日志和自动评测。
 - 插件端：Lightroom Classic 用户端，摄影师在 Lightroom 中选中照片，通过 Agent 对话完成修图，并由本地运行时把参数应用到当前照片。
 
-管理端后端面向云端部署，负责知识库、样片、风格、观测和评测；摄影师日常修图不依赖管理端后端。Lightroom 插件端由 TonePilot Local Runtime 在本机完成对话、模型调用、本地规则兜底和 Lightroom 参数应用。真实修图效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
+管理端后端面向云端部署，负责知识库、样片、风格、观测和评测；摄影师日常修图不依赖管理端后端。Lightroom 插件端由 TonePilot Local Runtime 在本机完成对话、模型调用和 Lightroom 参数应用。真实修图效果以 Lightroom Classic 当前照片的 Develop Settings 为准。
 
 ## 快速启动
 
 推荐在 WSL 目录中运行项目：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot
+cd <项目目录>
 ```
 
 启动本地依赖和后端：
@@ -33,7 +33,7 @@ chmod +x scripts/start-local-compose.sh
 ./scripts/start-local-compose.sh
 ```
 
-脚本会启动 Docker Compose 中的 MySQL、Redis、MinIO，并启动后端服务。默认 API 地址：
+脚本会启动 Docker Compose 中的 MySQL、Redis、MinIO、Milvus，并启动后端服务。默认 API 地址：
 
 ```text
 http://localhost:8080
@@ -78,7 +78,7 @@ docker compose up -d redis mysql minio etcd milvus
 插件运行在 Windows 的 Lightroom Classic 中。TonePilot Local Runtime 是用户侧核心，推荐运行在 WSL：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
+cd <项目目录>/clients/lightroom-classic/local-runtime
 chmod +x start-bridge-wsl.sh
 ./start-bridge-wsl.sh
 ```
@@ -86,7 +86,7 @@ chmod +x start-bridge-wsl.sh
 第一次安装插件需要在 Windows PowerShell 执行：
 
 ```powershell
-cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
+cd <项目目录>\clients\lightroom-classic\local-runtime
 .\install-plugin.ps1
 ```
 
@@ -103,7 +103,7 @@ Lightroom 当前选中照片
   -> Lua 插件读取照片信息和 Develop 参数
   -> TonePilot Local Runtime 打开 Agent 控制台
   -> 用户用对话描述调色意图
-  -> Local Runtime 使用本地规则或用户配置的 OpenAI/Qwen 生成参数
+  -> Local Runtime 使用用户配置的 OpenAI/Qwen 生成参数
   -> Local Runtime 写入任务文件
   -> Lua 插件调用 photo:applyDevelopSettings 应用到当前照片
 ```
@@ -135,7 +135,7 @@ Lightroom 选中照片
   -> Lua 插件写入 selected-photo.json、selected-preview.jpg 和当前 Develop 参数
   -> Local Runtime 读取当前照片状态
   -> 用户在 Agent 控制台输入修图意图
-  -> Local Runtime 根据模型配置选择本地规则、OpenAI 或 Qwen
+  -> Local Runtime 根据模型配置选择 OpenAI 或 Qwen
   -> 生成本轮 Develop Settings、参数 diff 和 Agent 回复
   -> Local Runtime 写入 apply-jobs
   -> Lua 插件调用 photo:applyDevelopSettings
@@ -170,12 +170,12 @@ Lightroom 选中照片
 
 ## 大模型配置
 
-默认使用 `rule` 本地规则模式，不需要模型密钥。真实模型通过 LangChain4j 的 OpenAI 兼容接口接入，当前支持 OpenAI 和阿里 Qwen2。
+默认使用在线模型配置。模型通过 OpenAI 兼容接口接入，当前支持 OpenAI 和阿里 Qwen2，需要配置对应 API Key。
 
 可以复制后端示例配置：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
+cd <项目目录>/tonepilot-admin/backend
 cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
@@ -200,7 +200,7 @@ export QWEN2_CHAT_MODEL=你的_Qwen2_文本模型
 export QWEN2_VISION_MODEL=你的_Qwen2_视觉模型
 ```
 
-插件端请求也可以传入 `provider`，临时选择 `rule`、`openai` 或 `qwen2`。
+插件端请求也可以传入 `provider`，临时选择 `openai` 或 `qwen2`。
 
 ## 项目结构
 
@@ -223,11 +223,11 @@ TonePilot/
 │   └── lightroom-classic/
 │       ├── local-runtime/           本地运行时、Agent 控制台、安装脚本和测试
 │       │   ├── server.js            本地运行时启动入口
-│       │   └── src/                 本地规则、模型适配、Lightroom 文件协议
+│       │   └── src/                 模型适配、Lightroom 文件协议
 │       └── plugin/                  Lightroom Classic Lua 插件源码
 ├── docs/                            架构说明
 ├── scripts/                         本地启动脚本
-└── docker-compose.yml               Redis、MySQL、MinIO 本地依赖
+└── docker-compose.yml               Redis、MySQL、MinIO、Milvus 本地依赖
 ```
 
 ## 核心 API
@@ -270,7 +270,7 @@ TonePilot/
 
 TonePilot 分为两类 Agent 编排：
 
-- 插件端 Local Runtime：负责 Lightroom 用户修图会话，读取当前照片状态，分析用户意图，使用本地规则或用户配置的 OpenAI/Qwen 生成本轮 Develop Settings，并把任务交给 Lua 插件应用到当前照片。
+- 插件端 Local Runtime：负责 Lightroom 用户修图会话，读取当前照片状态，分析用户意图，使用用户配置的 OpenAI/Qwen 生成本轮 Develop Settings，并把任务交给 Lua 插件应用到当前照片。
 - 管理端后端：负责云端知识库、样片分析、风格维护、RAG、自动评测和观测日志。它不直接控制本机 Lightroom，也不是摄影师日常修图的必需依赖。
 
 ## 验证命令
@@ -278,21 +278,21 @@ TonePilot 分为两类 Agent 编排：
 后端测试：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/backend
+cd <项目目录>/tonepilot-admin/backend
 mvn test
 ```
 
 前端构建：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/tonepilot-admin/frontend
+cd <项目目录>/tonepilot-admin/frontend
 npm run build
 ```
 
 Local Runtime 测试：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
+cd <项目目录>/clients/lightroom-classic/local-runtime
 npm test
 npm run check
 ```

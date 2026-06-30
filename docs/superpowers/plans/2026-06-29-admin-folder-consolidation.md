@@ -40,7 +40,7 @@
 - `cd clients/lightroom-classic/local-runtime && npm run check`
 
 - [ ] Windows 侧验证 Local Runtime 测试和语法检查。
-- [ ] 同步到 WSL `/home/lvchanghong/Code/TonePilot`。
+- [ ] 同步到 WSL `<项目目录>`。
 - [ ] WSL 侧验证后端 Maven 测试。
 - [ ] WSL 侧验证 Local Runtime 测试和语法检查。
 

@@ -68,6 +68,6 @@
 
 - [ ] 运行 `cd clients/lightroom-classic/local-runtime && npm test && npm run check`，预期 Node Runtime 测试通过。
 - [ ] 运行 `cd backend && mvn test`，预期管理端后端测试通过。
-- [ ] 同步到 WSL `/home/lvchanghong/Code/TonePilot`。
+- [ ] 同步到 WSL `<项目目录>`。
 - [ ] 提交并推送到 `origin/master`。
 

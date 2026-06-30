@@ -11,7 +11,7 @@
 这个目录是 TonePilot 的 Lightroom Classic 用户端本地运行时。用户层面只需要理解为“安装 TonePilot Lightroom 插件并启动 Agent”，运行时内部保留两部分：
 
 - Lightroom Classic Lua 插件：在 Lightroom 进程内读取当前照片、写入心跳、应用 `photo:applyDevelopSettings`。
-- TonePilot Local Runtime：在本机提供深灰 Agent 控制台、保存模型配置、调用本地规则/OpenAI/Qwen，并通过任务文件和插件协作。
+- TonePilot Local Runtime：在本机提供深灰 Agent 控制台、保存模型配置、调用 OpenAI/Qwen，并通过任务文件和插件协作。
 
 管理端后端不是用户修图的必需依赖。它未来作为云端部署，用于维护风格知识库、样片、评测和观测。
 
@@ -26,7 +26,7 @@ clients/lightroom-classic/
 在 Windows PowerShell 中运行：
 
 ```powershell
-cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
+cd <项目目录>\clients\lightroom-classic\local-runtime
 .\install-plugin.ps1
 ```
 
@@ -37,7 +37,7 @@ cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\l
 推荐在 WSL 中启动：
 
 ```bash
-cd /home/lvchanghong/Code/TonePilot/clients/lightroom-classic/local-runtime
+cd <项目目录>/clients/lightroom-classic/local-runtime
 chmod +x start-bridge-wsl.sh
 ./start-bridge-wsl.sh
 ```
@@ -46,14 +46,14 @@ chmod +x start-bridge-wsl.sh
 
 ```text
 监听地址：http://127.0.0.1:33335
-任务目录：/mnt/c/Users/lvchanghong/.tonepilot-lightroom-bridge
-模型配置：/mnt/c/Users/lvchanghong/.tonepilot-lightroom-bridge/runtime-config.json
+任务目录：%USERPROFILE%\.tonepilot-lightroom-bridge（WSL 中会自动映射到对应用户目录）
+模型配置：%USERPROFILE%\.tonepilot-lightroom-bridge\runtime-config.json
 ```
 
 也可以在 Windows PowerShell 中启动：
 
 ```powershell
-cd C:\Users\lvchanghong\Documents\摄影调色agent\TonePilot-scaffold\clients\lightroom-classic\local-runtime
+cd <项目目录>\clients\lightroom-classic\local-runtime
 .\start-bridge.ps1
 ```
 
@@ -73,7 +73,7 @@ http://127.0.0.1:33335/agent-console
 
 - 显示 Lightroom 当前选中照片信息和前后对比预览。
 - 以对话形式输入调色指令并持续多轮微调。
-- 默认使用本地规则，完全离线可用。
+- 使用 OpenAI 或阿里 Qwen2 等 OpenAI 兼容模型，需要先在本地模型设置中保存 API Key。
 - 可在本地设置 OpenAI 或阿里 Qwen2 的 Base URL、模型名和 API Key。
 - API Key 只写入本机 `runtime-config.json`，不发送给管理端。
 - 只修改 Agent 本轮明确生成的 Lightroom Develop Settings，未指定参数保持不变。
@@ -103,7 +103,7 @@ Agent 调色：
 ```bash
 curl -X POST http://127.0.0.1:33335/api/lightroom-agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"夜景电影感，再亮一点，但不要改变白平衡","provider":"rule"}'
+  -d '{"message":"夜景电影感，再亮一点，但不要改变白平衡","provider":"qwen2"}'
 ```
 
 ## 验证

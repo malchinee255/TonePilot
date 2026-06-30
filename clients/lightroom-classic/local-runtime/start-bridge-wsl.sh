@@ -4,14 +4,28 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
-windows_user="${TONEPILOT_WINDOWS_USER:-}"
-if [[ -z "$windows_user" ]] && command -v cmd.exe >/dev/null 2>&1; then
-  windows_user="$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r\n')"
+windows_profile="${TONEPILOT_WINDOWS_PROFILE:-}"
+if [[ -z "$windows_profile" ]] && command -v cmd.exe >/dev/null 2>&1; then
+  windows_profile="$(cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r\n')"
 fi
-windows_user="${windows_user:-lvchanghong}"
 
-windows_home="${TONEPILOT_WINDOWS_HOME:-/mnt/c/Users/${windows_user}}"
-lightroom_root="${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT:-C:\\Users\\${windows_user}\\.tonepilot-lightroom-bridge}"
+windows_home="${TONEPILOT_WINDOWS_HOME:-}"
+if [[ -z "$windows_home" && -n "$windows_profile" ]] && command -v wslpath >/dev/null 2>&1; then
+  windows_home="$(wslpath -u "$windows_profile")"
+fi
+if [[ -z "$windows_home" ]]; then
+  echo "[TonePilot Local Runtime] 无法自动识别 Windows 用户目录，请设置 TONEPILOT_WINDOWS_HOME。" >&2
+  exit 1
+fi
+
+lightroom_root="${TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT:-}"
+if [[ -z "$lightroom_root" && -n "$windows_profile" ]]; then
+  lightroom_root="${windows_profile}\\.tonepilot-lightroom-bridge"
+fi
+if [[ -z "$lightroom_root" ]]; then
+  echo "[TonePilot Local Runtime] 无法自动识别 Lightroom 任务目录，请设置 TONEPILOT_LIGHTROOM_BRIDGE_LIGHTROOM_ROOT。" >&2
+  exit 1
+fi
 
 export TONEPILOT_LIGHTROOM_BRIDGE_PORT="${TONEPILOT_LIGHTROOM_BRIDGE_PORT:-33335}"
 export TONEPILOT_LIGHTROOM_BRIDGE_HOST="${TONEPILOT_LIGHTROOM_BRIDGE_HOST:-0.0.0.0}"
