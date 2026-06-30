@@ -6,6 +6,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
@@ -35,5 +36,36 @@ class ModelRuntimeAgentTest {
                 Map.of("provider", "qwen2", "qwen2", Map.of("model", "qwen-plus"))
         )).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("模型配置不完整");
+    }
+
+    @Test
+    void parsesMainAgentThoughtFromModelResult() {
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+        ReflectionTestUtils.setField(modelAgent, "traceLogger", mock(RuntimeTraceLogger.class));
+        String modelResponse = """
+                {
+                  "choices": [
+                    {
+                      "message": {
+                        "content": "{\\"assistantMessage\\":\\"我先判断这是一张夜景城市照片。\\",\\"agentThought\\":{\\"summary\\":\\"画面偏暗但灯光层次完整\\",\\"observations\\":[\\"天空和水面占比较高\\",\\"建筑灯光是视觉中心\\"],\\"reasoningVisible\\":\\"这类照片适合压住高光、提亮暗部并保留夜景氛围。\\",\\"decision\\":\\"apply_global_adjustments\\",\\"nextAction\\":\\"调用 Lightroom 全局调色工具\\",\\"toolPlan\\":[\\"提高曝光\\",\\"压低高光\\"],\\"userOptions\\":[\\"确认按这个修\\",\\"先不要修，只看分析\\"]},\\"analysis\\":{\\"intent\\":\\"夜景电影感\\",\\"photoType\\":\\"城市夜景\\",\\"recommendedStyle\\":\\"冷暖对比电影感\\"},\\"developSettings\\":{\\"Exposure2012\\":0.18},\\"localAdjustments\\":[]}"
+                      }
+                    }
+                  ]
+                }
+                """;
+
+        AgentTuneResult result = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "parseModelResult",
+                new AgentInput("帮我分析并修图", Map.of("Exposure2012", 0)),
+                modelResponse
+        );
+
+        assertThat(result).isNotNull();
+        assertThat(result.agentThought()).isNotNull();
+        assertThat(result.agentThought().summary()).isEqualTo("画面偏暗但灯光层次完整");
+        assertThat(result.agentThought().observations()).contains("天空和水面占比较高");
+        assertThat(result.agentThought().decision()).isEqualTo("apply_global_adjustments");
+        assertThat(result.agentThought().userOptions()).contains("确认按这个修");
     }
 }

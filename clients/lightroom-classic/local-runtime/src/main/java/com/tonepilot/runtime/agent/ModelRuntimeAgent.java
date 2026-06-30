@@ -115,13 +115,16 @@ public class ModelRuntimeAgent {
                     ? objectMapper.convertValue(json.path("analysis"), new TypeReference<>() {
                     })
                     : Map.of("intent", input.message(), "photoType", "当前 Lightroom 照片", "recommendedStyle", "由模型分析生成");
+            AgentThought agentThought = parseAgentThought(json, analysis);
             if (developSettings == null || developSettings.isEmpty()) {
                 traceLogger.info("model.parse.analysis_only", "", Map.of(
                         "hasAnalysis", json.has("analysis"),
-                        "localAdjustmentCount", localAdjustments.size()
+                        "localAdjustmentCount", localAdjustments.size(),
+                        "hasAgentThought", json.has("agentThought")
                 ));
                 return new AgentTuneResult(
                         json.path("assistantMessage").asText("我已经完成照片分析，本轮不需要修改 Lightroom 全局参数。"),
+                        agentThought,
                         Map.of(),
                         List.of(),
                         analysis,
@@ -132,10 +135,12 @@ public class ModelRuntimeAgent {
             traceLogger.info("model.parse.succeeded", "", Map.of(
                     "settingCount", developSettings.size(),
                     "localAdjustmentCount", localAdjustments.size(),
-                    "hasAnalysis", json.has("analysis")
+                    "hasAnalysis", json.has("analysis"),
+                    "hasAgentThought", json.has("agentThought")
             ));
             return new AgentTuneResult(
                     json.path("assistantMessage").asText("已根据模型结果生成 Lightroom 调色参数。"),
+                    agentThought,
                     developSettings,
                     buildDeltas(input.currentSettings(), developSettings),
                     analysis,
@@ -147,6 +152,30 @@ public class ModelRuntimeAgent {
             traceLogger.warn("model.parse.failed", "", Map.of("error", exception.getMessage()));
             throw new IllegalStateException("模型响应解析失败：" + exception.getMessage(), exception);
         }
+    }
+
+    private AgentThought parseAgentThought(JsonNode json, Map<String, Object> analysis) {
+        if (!json.has("agentThought") || !json.path("agentThought").isObject()) {
+            return new AgentThought(
+                    String.valueOf(analysis.getOrDefault("recommendedStyle", "已完成当前照片判断。")),
+                    List.of(String.valueOf(analysis.getOrDefault("photoType", "当前 Lightroom 照片"))),
+                    String.valueOf(analysis.getOrDefault("intent", "根据用户输入和当前照片状态判断下一步。")),
+                    "respond",
+                    "等待用户确认或继续输入微调要求",
+                    List.of(),
+                    List.of("确认按这个方向修", "先不要修，只看分析")
+            );
+        }
+        AgentThought thought = objectMapper.convertValue(json.path("agentThought"), AgentThought.class);
+        return new AgentThought(
+                stringOrDefault(thought.summary(), String.valueOf(analysis.getOrDefault("recommendedStyle", ""))),
+                thought.observations() == null ? List.of() : thought.observations(),
+                stringOrDefault(thought.reasoningVisible(), String.valueOf(analysis.getOrDefault("intent", ""))),
+                stringOrDefault(thought.decision(), "respond"),
+                stringOrDefault(thought.nextAction(), "等待用户继续确认"),
+                thought.toolPlan() == null ? List.of() : thought.toolPlan(),
+                thought.userOptions() == null ? List.of() : thought.userOptions()
+        );
     }
 
     private List<AgentDelta> buildDeltas(Map<String, Object> current, Map<String, Object> developSettings) {
@@ -167,13 +196,25 @@ public class ModelRuntimeAgent {
         return """
                 你是 TonePilot 的 Lightroom 调色 Agent。
                 只允许输出严格 JSON，不要输出 Markdown。
+                你需要像主 Agent 一样先观察用户意图、当前照片调色状态和可用工具，再决定下一步动作。
+                agentThought 是展示给用户看的阶段性判断结果，必须简洁、可解释，不要输出隐藏推理链或冗长思维过程。
+                decision 只能是 respond、ask_user、apply_global_adjustments、plan_local_adjustments 之一。
                 developSettings 只输出本轮需要真实应用的全局 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
-                如果用户只要求分析而不要求修图，则 developSettings 输出空对象。
+                如果 decision 不是 apply_global_adjustments，则 developSettings 输出空对象。
                 localAdjustments 用来描述局部蒙版计划，当前只作为计划展示，不会直接写入 Lightroom 蒙版。
                 localAdjustments 的 region 必须使用 normalized_crop 坐标，x/y/w/h/centerX/centerY/radius 都在 0 到 1 之间。
                 JSON 结构：
                 {
                   "assistantMessage": "中文解释",
+                  "agentThought": {
+                    "summary": "主 Agent 对本轮请求的简短判断",
+                    "observations": ["看到的关键画面/参数/意图线索"],
+                    "reasoningVisible": "面向用户可展示的判断依据，不要写隐藏推理链",
+                    "decision": "respond|ask_user|apply_global_adjustments|plan_local_adjustments",
+                    "nextAction": "下一步准备做什么",
+                    "toolPlan": ["如果要调用工具，列出准备做的动作"],
+                    "userOptions": ["用户可以继续点击或输入的选项"]
+                  },
                   "analysis": {"intent":"", "photoType":"", "recommendedStyle":""},
                   "developSettings": {"Exposure2012": 0.2},
                   "localAdjustments": [
@@ -233,6 +274,10 @@ public class ModelRuntimeAgent {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String stringOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private String trimSlash(String value) {

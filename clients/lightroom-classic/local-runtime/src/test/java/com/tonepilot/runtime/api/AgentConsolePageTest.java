@@ -25,7 +25,7 @@ class AgentConsolePageTest {
     }
 
     @Test
-    void clearsPromptImmediatelyAndShowsVisibleAgentSteps() throws Exception {
+    void clearsPromptImmediatelyAndShowsMainAgentThought() throws Exception {
         String html;
         try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
             assertThat(input).isNotNull();
@@ -34,6 +34,9 @@ class AgentConsolePageTest {
 
         assertThat(html).contains("prompt.value = ''");
         assertThat(html).contains("addThinkingMessage");
-        assertThat(html).contains("Agent 执行过程");
+        assertThat(html).contains("思考中");
+        assertThat(html).contains("renderAgentThought");
+        assertThat(html).doesNotContain("Agent 执行过程");
+        assertThat(html).doesNotContain("读取 Lightroom 当前照片和调色上下文");
     }
 }

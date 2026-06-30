@@ -121,6 +121,10 @@ public class RuntimeAgentOrchestrator {
         if (tuneResult.developSettings() == null || tuneResult.developSettings().isEmpty()) {
             return false;
         }
+        String decision = tuneResult.agentThought() == null ? "" : String.valueOf(tuneResult.agentThought().decision()).trim();
+        if (!decision.isBlank()) {
+            return "apply_global_adjustments".equals(decision);
+        }
         String value = message == null ? "" : message.trim().toLowerCase();
         if (containsAny(value, "不要修", "先别修", "只分析", "分析一下", "看看", "建议", "方案")) {
             return containsAny(value, "修成", "调成", "改成", "执行", "应用", "按这个修");
@@ -144,10 +148,12 @@ public class RuntimeAgentOrchestrator {
         data.put("sessionId", sessionId);
         data.put("photo", selected.getOrDefault("photo", Map.of()));
         data.put("analysis", tuneResult.analysis());
+        data.put("agentThought", tuneResult.agentThought());
         data.put("assistantMessage", tuneResult.assistantMessage());
         data.put("deltas", tuneResult.deltas());
         data.put("developSettings", tuneResult.developSettings());
         data.put("localAdjustments", tuneResult.localAdjustments());
+        data.put("suggestedReplies", tuneResult.agentThought().userOptions() == null ? List.of() : tuneResult.agentThought().userOptions());
         data.put("capabilities", Map.of(
                 "supportsGlobalDevelopSettings", true,
                 "supportsLocalMasks", false,

@@ -436,7 +436,7 @@
       white-space: pre-wrap;
     }
 
-    .thinking-steps {
+    .thinking-card {
       margin-top: 10px;
       display: grid;
       gap: 6px;
@@ -444,7 +444,7 @@
       font-size: 12px;
     }
 
-    .thinking-step {
+    .thinking-line {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -458,16 +458,14 @@
       flex: 0 0 auto;
     }
 
-    .thinking-step.done .thinking-dot {
-      background: var(--ok);
-    }
-
-    .thinking-step.active .thinking-dot {
+    .thinking-message .thinking-dot {
       background: var(--accent);
+      animation: pulse 1.1s ease-in-out infinite;
     }
 
-    .thinking-step.failed .thinking-dot {
-      background: var(--warn);
+    @keyframes pulse {
+      0%, 100% { opacity: .45; }
+      50% { opacity: 1; }
     }
 
     .agent-actions {
@@ -1054,6 +1052,7 @@
 
     function renderAgentResult(data) {
       const analysis = data.analysis || {}
+      const thought = data.agentThought || {}
       const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || '') + '</li>').join('')
       const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
       const localPlans = (data.localAdjustments || []).map(plan => {
@@ -1075,18 +1074,55 @@
       const toolText = data.action === 'tool_submitted'
         ? '<div class="agent-block">我已经调用 Lightroom 全局调色工具，正在等待本地插件处理完成。</div>'
         : ''
+      const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
       addMessage('agent', [
         '<div>' + escapeHtml(data.assistantMessage || '') + '</div>',
-        '<div class="agent-block"><strong>意图分析</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-') + '</div>',
+        renderAgentThought(thought, analysis),
         knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
         deltas ? '<div class="agent-block"><strong>全局调色参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
         localPlans ? '<div class="agent-block"><strong>局部蒙版计划</strong>\n' + escapeHtml(capabilityText) + '<div class="deltas">' + localPlans + '</div></div>' : '',
         toolText,
-        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : ''
+        data.modelRawContent ? '<details class="agent-block"><summary>模型原始返回</summary>' + escapeHtml(data.modelRawContent) + '</details>' : '',
+        suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
       ].join(''))
+      chat.querySelectorAll('button[data-reply]').forEach(button => {
+        button.addEventListener('click', () => {
+          prompt.value = button.dataset.reply || ''
+          sendMessage()
+        })
+      })
       if (data.action === 'tool_submitted' && data.apply?.jobId) {
         pollApplyStatus(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl)
       }
+    }
+
+    function renderAgentThought(thought, analysis) {
+      const observations = (thought.observations || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      const toolPlan = (thought.toolPlan || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      return [
+        '<div class="agent-block">',
+        '<strong>主 Agent 判断</strong>',
+        thought.summary ? '\n' + escapeHtml(thought.summary) : '',
+        observations ? '\n\n<strong>观察到的线索</strong><ul>' + observations + '</ul>' : '',
+        thought.reasoningVisible ? '\n<strong>判断依据</strong>\n' + escapeHtml(thought.reasoningVisible) : '',
+        thought.decision ? '\n\n<strong>本轮决策</strong>\n' + escapeHtml(labelDecision(thought.decision)) : '',
+        thought.nextAction ? '\n\n<strong>下一步</strong>\n' + escapeHtml(thought.nextAction) : '',
+        toolPlan ? '\n\n<strong>准备使用的工具动作</strong><ul>' + toolPlan + '</ul>' : '',
+        (!thought.summary && !observations && !thought.reasoningVisible)
+          ? '\n<strong>意图</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-')
+          : '',
+        '</div>'
+      ].join('')
+    }
+
+    function labelDecision(decision) {
+      const labels = {
+        respond: '先回复分析，不直接修图',
+        ask_user: '需要用户补充选择',
+        apply_global_adjustments: '调用 Lightroom 全局调色',
+        plan_local_adjustments: '给出局部蒙版计划'
+      }
+      return labels[decision] || decision
     }
 
     function addThinkingMessage() {
@@ -1094,13 +1130,9 @@
       node.className = 'message agent thinking-message'
       node.innerHTML = [
         '<span class="role">Agent</span>',
-        '<strong>Agent 执行过程</strong>',
-        '<div class="thinking-steps">',
-        '<div class="thinking-step active" data-step="photo"><span class="thinking-dot"></span><span>读取 Lightroom 当前照片和调色上下文</span></div>',
-        '<div class="thinking-step" data-step="intent"><span class="thinking-dot"></span><span>分析用户意图和照片类型</span></div>',
-        '<div class="thinking-step" data-step="knowledge"><span class="thinking-dot"></span><span>检查知识库和可用工具能力</span></div>',
-        '<div class="thinking-step" data-step="model"><span class="thinking-dot"></span><span>调用大模型生成调色方案</span></div>',
-        '<div class="thinking-step" data-step="tool"><span class="thinking-dot"></span><span>解析参数并决定是否调用 Lightroom</span></div>',
+        '<div class="thinking-card">',
+        '<div class="thinking-line"><span class="thinking-dot"></span><strong>思考中...</strong></div>',
+        '<div>我正在观察当前照片、理解你的意图，并判断是否需要查询知识库或调用 Lightroom 工具。</div>',
         '</div>'
       ].join('')
       chat.appendChild(node)
@@ -1108,25 +1140,13 @@
       return node
     }
 
-    function markThinkingStatus(node, step, status) {
-      if (!node) return
-      const item = node.querySelector('[data-step="' + step + '"]')
-      if (!item) return
-      item.classList.remove('active', 'done', 'failed')
-      item.classList.add(status)
-    }
-
     function finishThinking(node, failed) {
       if (!node) return
-      node.querySelectorAll('.thinking-step').forEach(item => {
-        if (failed && !item.classList.contains('done')) {
-          item.classList.remove('active')
-          item.classList.add('failed')
-        } else if (!failed) {
-          item.classList.remove('active')
-          item.classList.add('done')
-        }
-      })
+      if (failed) {
+        node.classList.add('failed')
+        return
+      }
+      node.remove()
     }
 
     async function sendMessage() {
@@ -1138,28 +1158,20 @@
       send.disabled = true
       setStatus(photoStatus, 'Agent 正在分析上下文...', '')
       try {
-        markThinkingStatus(thinking, 'photo', 'done')
-        markThinkingStatus(thinking, 'intent', 'active')
         const response = await fetch('/api/lightroom-agent/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, provider: provider.value, sessionId })
         })
-        markThinkingStatus(thinking, 'intent', 'done')
-        markThinkingStatus(thinking, 'knowledge', 'done')
-        markThinkingStatus(thinking, 'model', 'active')
         const result = await response.json()
         if (!result.success) {
           finishThinking(thinking, true)
           addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(result.message || '未知错误'))
           return
         }
-        markThinkingStatus(thinking, 'model', 'done')
-        markThinkingStatus(thinking, 'tool', 'active')
         sessionId = result.data.sessionId
-        renderAgentResult(result.data)
-        markThinkingStatus(thinking, 'tool', 'done')
         finishThinking(thinking, false)
+        renderAgentResult(result.data)
       } catch (error) {
         finishThinking(thinking, true)
         addMessage('agent', '调用失败：' + escapeHtml(error.message))
