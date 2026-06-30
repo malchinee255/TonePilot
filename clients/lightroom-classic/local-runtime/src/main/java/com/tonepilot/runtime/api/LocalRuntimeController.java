@@ -3,6 +3,7 @@ package com.tonepilot.runtime.api;
 import com.tonepilot.runtime.agent.RuntimeAgentOrchestrator;
 import com.tonepilot.runtime.bridge.LightroomStateService;
 import com.tonepilot.runtime.config.RuntimeConfigService;
+import com.tonepilot.runtime.observability.TraceContextManager;
 import com.tonepilot.runtime.observability.RuntimeTraceLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -40,6 +41,9 @@ public class LocalRuntimeController {
     @Autowired
     private RuntimeTraceLogger traceLogger;
 
+    @Autowired
+    private TraceContextManager traceContextManager;
+
     @GetMapping("/status")
     public Map<String, Object> status() {
         traceLogger.info("api.status.request", "", Map.of());
@@ -66,11 +70,14 @@ public class LocalRuntimeController {
 
     @PostMapping("/api/lightroom-agent/chat")
     public Map<String, Object> chat(@RequestBody Map<String, Object> payload) {
-        traceLogger.info("api.agent_chat.request", String.valueOf(payload.getOrDefault("sessionId", "")), Map.of(
-                "provider", payload.getOrDefault("provider", ""),
-                "messageLength", String.valueOf(payload.getOrDefault("message", "")).length()
-        ));
-        return orchestrator.chat(payload);
+        String sessionId = String.valueOf(payload.getOrDefault("sessionId", ""));
+        try (TraceContextManager.TraceScope ignored = traceContextManager.open(sessionId)) {
+            traceLogger.info("api.agent_chat.request", sessionId, Map.of(
+                    "provider", payload.getOrDefault("provider", ""),
+                    "messageLength", String.valueOf(payload.getOrDefault("message", "")).length()
+            ));
+            return orchestrator.chat(payload);
+        }
     }
 
     @GetMapping("/api/lightroom-agent/apply-status/{jobId}")
