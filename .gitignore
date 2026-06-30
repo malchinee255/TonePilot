@@ -3,11 +3,12 @@
 target/
 node_modules/
 dist/
+.vite/
+logs/
+tonepilot-admin/backend/data/
 .DS_Store
 *.log
-logs/
 storage/
 uploads/
 .env
 .env.local
-tonepilot-admin/backend/data/

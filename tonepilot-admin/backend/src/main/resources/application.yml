@@ -50,10 +50,22 @@ tonepilot:
       bucket: ${MINIO_BUCKET:tonepilot}
   rag:
     default-top-k: 5
-  ingestion:
-    douyin:
-      command: ${TONEPILOT_DOUYIN_IMPORT_COMMAND:}
-      timeout-seconds: ${TONEPILOT_DOUYIN_IMPORT_TIMEOUT_SECONDS:120}
+    hybrid:
+      enabled: ${TONEPILOT_RAG_HYBRID_ENABLED:true}
+      keyword-weight: ${TONEPILOT_RAG_KEYWORD_WEIGHT:0.45}
+      vector-weight: ${TONEPILOT_RAG_VECTOR_WEIGHT:0.45}
+      rerank-weight: ${TONEPILOT_RAG_RERANK_WEIGHT:0.10}
+      embedding:
+        provider: ${TONEPILOT_EMBEDDING_PROVIDER:openai}
+        model: ${TONEPILOT_EMBEDDING_MODEL:text-embedding-3-small}
+        dimensions: ${TONEPILOT_EMBEDDING_DIMENSIONS:1536}
+      vector-store:
+        type: ${TONEPILOT_VECTOR_STORE:memory}
+        milvus-uri: ${MILVUS_URI:http://localhost:19530}
+        collection: ${MILVUS_COLLECTION:tonepilot_knowledge}
+      rerank:
+        provider: ${TONEPILOT_RERANK_PROVIDER:none}
+        model: ${TONEPILOT_RERANK_MODEL:}
   ai:
     provider: ${TONEPILOT_AI_PROVIDER:rule}
     fallback-enabled: ${TONEPILOT_AI_FALLBACK_ENABLED:true}

@@ -25,21 +25,21 @@ public class StyleKnowledgeService {
     private final StyleService styleService;
     private final StyleSampleService styleSampleService;
     private final KnowledgeGenerationAgent knowledgeGenerationAgent;
-
-    @Autowired
-    private KnowledgeVectorIndexService vectorIndexService;
+    private final KnowledgeVectorIndexService knowledgeVectorIndexService;
 
     @Autowired
     public StyleKnowledgeService(
             InMemoryTonePilotStore store,
             StyleService styleService,
             StyleSampleService styleSampleService,
-            KnowledgeGenerationAgent knowledgeGenerationAgent
+            KnowledgeGenerationAgent knowledgeGenerationAgent,
+            KnowledgeVectorIndexService knowledgeVectorIndexService
     ) {
         this.store = store;
         this.styleService = styleService;
         this.styleSampleService = styleSampleService;
         this.knowledgeGenerationAgent = knowledgeGenerationAgent;
+        this.knowledgeVectorIndexService = knowledgeVectorIndexService;
     }
 
     public StyleKnowledge generateFromSample(Long sampleId) {
@@ -85,37 +85,6 @@ public class StyleKnowledgeService {
                 .toList();
     }
 
-    public StyleKnowledge createDraftFromMaterial(
-            Long styleId,
-            String title,
-            String scene,
-            String targetStyle,
-            List<String> problems,
-            List<String> strategy,
-            Map<String, String> paramRanges,
-            String content
-    ) {
-        Instant now = Instant.now();
-        StyleKnowledge saved = new StyleKnowledge(
-                store.styleKnowledgeIds.getAndIncrement(),
-                styleId,
-                null,
-                title,
-                scene,
-                targetStyle,
-                problems == null ? List.of() : problems,
-                strategy == null ? List.of() : strategy,
-                paramRanges == null ? Map.of() : paramRanges,
-                content,
-                "local-material-" + UUID.randomUUID(),
-                "pending",
-                now,
-                now
-        );
-        store.styleKnowledge.put(saved.id(), saved);
-        return saved;
-    }
-
     public StyleKnowledge get(Long id) {
         StyleKnowledge knowledge = store.styleKnowledge.get(id);
         if (knowledge == null) {
@@ -147,7 +116,9 @@ public class StyleKnowledgeService {
     }
 
     public StyleKnowledge approve(Long id) {
-        return changeStatus(id, "approved");
+        StyleKnowledge approved = changeStatus(id, "approved");
+        knowledgeVectorIndexService.indexStyleKnowledge(approved);
+        return approved;
     }
 
     public StyleKnowledge reject(Long id) {
@@ -177,10 +148,37 @@ public class StyleKnowledgeService {
                 Instant.now()
         );
         store.styleKnowledge.put(id, updated);
-        if ("approved".equals(status)) {
-            vectorIndexService.indexStyleKnowledge(updated);
-        }
         return updated;
+    }
+
+    public StyleKnowledge createDraftFromMaterial(
+            Long styleId,
+            String title,
+            String scene,
+            String targetStyle,
+            List<String> problems,
+            List<String> strategy,
+            Map<String, String> paramRanges,
+            String content
+    ) {
+        StyleKnowledge saved = new StyleKnowledge(
+                store.styleKnowledgeIds.getAndIncrement(),
+                styleId,
+                null,
+                valueOr(title, "导入素材生成的调色知识"),
+                valueOr(scene, "通用摄影场景"),
+                valueOr(targetStyle, "自然调色"),
+                problems == null ? List.of() : problems,
+                strategy == null ? List.of() : strategy,
+                paramRanges == null ? Map.of() : paramRanges,
+                valueOr(content, ""),
+                "material-style-" + UUID.randomUUID(),
+                "pending",
+                Instant.now(),
+                Instant.now()
+        );
+        store.styleKnowledge.put(saved.id(), saved);
+        return saved;
     }
 
     private String valueOr(String value, String fallback) {

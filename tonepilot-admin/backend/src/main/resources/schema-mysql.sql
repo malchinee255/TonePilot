@@ -59,26 +59,25 @@ CREATE TABLE IF NOT EXISTS runtime_user (
 CREATE TABLE IF NOT EXISTS runtime_device (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
-    fingerprint VARCHAR(128) NOT NULL,
+    fingerprint VARCHAR(255) NOT NULL,
     device_name VARCHAR(128),
     endpoint VARCHAR(255),
     metadata_json TEXT,
     last_seen_at TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
-    UNIQUE KEY idx_runtime_device_fingerprint (fingerprint),
-    KEY idx_runtime_device_user (user_id)
+    UNIQUE KEY idx_runtime_device_fingerprint (fingerprint)
 );
 
 CREATE TABLE IF NOT EXISTS runtime_event (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
     device_id VARCHAR(64) NOT NULL,
-    event_type VARCHAR(128) NOT NULL,
+    event_type VARCHAR(128),
     session_id VARCHAR(128),
     payload_json TEXT,
     created_at TIMESTAMP,
-    KEY idx_runtime_event_user_time (user_id, created_at)
+    KEY idx_runtime_event_user (user_id, created_at)
 );
 
 CREATE INDEX idx_llm_call_log_started_at ON llm_call_log(started_at);
