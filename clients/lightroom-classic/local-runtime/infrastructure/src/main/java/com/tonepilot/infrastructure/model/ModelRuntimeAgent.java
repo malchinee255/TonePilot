@@ -17,16 +17,23 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tonepilot.infrastructure.observability.RuntimeTraceLogger;
+import com.tonepilot.infrastructure.config.RuntimeProperties;
+import com.tonepilot.infrastructure.lightroom.filesystem.BridgePaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +47,9 @@ public class ModelRuntimeAgent {
 
     @Autowired
     private RuntimeTraceLogger traceLogger;
+
+    @Autowired
+    private RuntimeProperties properties = new RuntimeProperties();
 
     private HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
@@ -63,18 +73,22 @@ public class ModelRuntimeAgent {
         try {
             String systemPrompt = systemPrompt();
             String userPrompt = userPrompt(input);
+            String imageDataUrl = supportsVisionModel(provider, config.model()) ? previewDataUrl(input.previewUrl()) : "";
             traceLogger.info("model.request.sending", sessionId, Map.of(
                     "provider", provider,
                     "baseUrl", config.baseUrl(),
                     "model", config.model(),
                     "userMessage", input.message() == null ? "" : input.message(),
-                    "userPrompt", userPrompt
+                    "userPrompt", userPrompt,
+                    "hasPhotoMetadata", input.photoMetadata() != null && !input.photoMetadata().isEmpty(),
+                    "hasPreviewImage", !imageDataUrl.isBlank()
             ));
             String body = objectMapper.writeValueAsString(buildChatRequestPayload(
                     provider,
                     config.model(),
                     systemPrompt,
-                    userPrompt
+                    userPrompt,
+                    imageDataUrl
             ));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(trimSlash(config.baseUrl()) + "/chat/completions"))
@@ -117,13 +131,29 @@ public class ModelRuntimeAgent {
             String systemPrompt,
             String userPrompt
     ) {
+        return buildChatRequestPayload(provider, model, systemPrompt, userPrompt, "");
+    }
+
+    private Map<String, Object> buildChatRequestPayload(
+            String provider,
+            String model,
+            String systemPrompt,
+            String userPrompt,
+            String imageDataUrl
+    ) {
         Map<String, Object> payload = new java.util.LinkedHashMap<>();
         payload.put("model", model);
         payload.put("temperature", 0.2);
         payload.put("max_tokens", 1600);
+        Object userContent = imageDataUrl == null || imageDataUrl.isBlank()
+                ? userPrompt
+                : List.of(
+                Map.of("type", "text", "text", userPrompt),
+                Map.of("type", "image_url", "image_url", Map.of("url", imageDataUrl))
+        );
         payload.put("messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", userPrompt)
+                Map.of("role", "user", "content", userContent)
         ));
         if ("qwen2".equalsIgnoreCase(provider)) {
             payload.put("enable_thinking", false);
@@ -272,8 +302,52 @@ public class ModelRuntimeAgent {
 
     private String userPrompt(AgentInput input) {
         return "用户意图：\n" + input.message()
+                + "\n\n当前照片元数据：\n" + safeJson(input.photoMetadata())
+                + "\n\n当前照片预览：\n" + stringValue(input.previewUrl())
                 + "\n\n当前 Lightroom 参数：\n" + safeJson(input.currentSettings())
-                + "\n\n管理端知识库匹配：\n" + safeJson(input.knowledgeMatches());
+                + "\n\n管理端知识库匹配：\n" + safeJson(input.knowledgeMatches())
+                + "\n\n如果消息中附带了 image_url，请优先观察照片内容；如果没有附带图片，则只能基于元数据、当前参数、用户意图和知识库判断，并要说明不确定性。";
+    }
+
+    private boolean supportsVisionModel(String provider, String model) {
+        String value = (model == null ? "" : model).toLowerCase();
+        if (value.contains("vl") || value.contains("vision") || value.contains("omni")) {
+            return true;
+        }
+        if ("openai".equalsIgnoreCase(provider)) {
+            return value.contains("gpt-4o") || value.contains("gpt-4.1") || value.contains("gpt-5") || value.contains("o4");
+        }
+        return false;
+    }
+
+    private String previewDataUrl(String previewUrl) {
+        try {
+            String value = stringValue(previewUrl);
+            if (value.isBlank()) {
+                return "";
+            }
+            if (value.startsWith("data:image/")) {
+                return value;
+            }
+            if (value.startsWith("http://") || value.startsWith("https://")) {
+                return value;
+            }
+            if (!value.startsWith("/files/")) {
+                return "";
+            }
+            String fileName = value.substring("/files/".length()).replaceFirst("\\?.*$", "");
+            fileName = URLDecoder.decode(fileName, StandardCharsets.UTF_8);
+            BridgePaths paths = new BridgePaths(properties);
+            Path resultsDir = paths.fs("results").normalize();
+            Path file = resultsDir.resolve(fileName).normalize();
+            if (!file.startsWith(resultsDir) || !Files.exists(file) || Files.size(file) > 5_000_000) {
+                return "";
+            }
+            String mime = fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+            return "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(Files.readAllBytes(file));
+        } catch (Exception exception) {
+            return "";
+        }
     }
 
     private String safeJson(Object value) {

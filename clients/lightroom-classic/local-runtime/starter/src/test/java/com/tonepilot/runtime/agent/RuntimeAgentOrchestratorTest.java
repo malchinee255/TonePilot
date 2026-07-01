@@ -204,6 +204,8 @@ class RuntimeAgentOrchestratorTest {
         verify(context.modelAgent).plan(captor.capture(), eq("qwen2"), anyMap(), anyString());
         assertThat(captor.getValue().knowledgeMatches()).hasSize(1);
         assertThat(captor.getValue().knowledgeMatches().get(0).get("title")).isEqualTo("夜景高光控制");
+        assertThat(captor.getValue().photoMetadata()).containsEntry("fileName", "DSCF1709.RAF");
+        assertThat(captor.getValue().previewUrl()).contains("selected-preview.jpg");
     }
 
 
@@ -272,8 +274,9 @@ class RuntimeAgentOrchestratorTest {
             when(stateService.status()).thenReturn(Map.of("available", true));
             when(stateService.selectedPhoto()).thenReturn(Map.of(
                     "available", true,
-                    "photo", Map.of("fileName", "DSCF0001.RAF"),
-                    "currentAdjustment", Map.of()
+                    "photo", Map.of("fileName", "DSCF1709.RAF"),
+                    "currentAdjustment", Map.of(),
+                    "previewUrl", "/files/selected-preview.jpg?t=1782890000"
             ));
         }
 

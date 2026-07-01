@@ -112,7 +112,11 @@ public class RuntimeAgentOrchestrator {
                 : "我已检索到可参考的调色知识，会把它纳入本轮判断。", Map.of("matchCount", knowledgeMatches.size(), "matches", knowledgeMatches));
         traceLogger.info("agent.knowledge.retrieved", sessionId, Map.of("matchCount", knowledgeMatches.size()));
 
-        AgentInput agentInput = new AgentInput(message, currentAdjustment, knowledgeMatches);
+        Map<String, Object> photoMetadata = selected.get("photo") instanceof Map<?, ?> photoMap
+                ? (Map<String, Object>) photoMap
+                : Map.of();
+        String previewUrl = String.valueOf(selected.getOrDefault("previewUrl", selected.getOrDefault("baselinePreviewUrl", "")));
+        AgentInput agentInput = new AgentInput(message, currentAdjustment, knowledgeMatches, photoMetadata, previewUrl);
         AgentTuneResult tuneResult;
         try {
             emit(reactEvents, eventSink, sessionId, "model.request", "调用主 Agent 模型", "我正在让主 Agent 结合意图、照片参数和知识库生成下一步决策。", Map.of("provider", provider));

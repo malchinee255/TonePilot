@@ -1062,6 +1062,15 @@
       return node
     }
 
+    function finalizeAgentMessage(thinking, html) {
+      if (!thinking) return addMessage('agent', html)
+      thinking.classList.remove('thinking-message')
+      thinking.className = 'message agent'
+      thinking.innerHTML = '<span class="role">Agent</span>' + html
+      chat.scrollTop = chat.scrollHeight
+      return thinking
+    }
+
     function isVisibleReactEvent(event) {
       const type = event && event.type ? event.type : ''
       return type === 'agent.thought' || type === 'agent.error'
@@ -1088,7 +1097,7 @@
       chat.scrollTop = chat.scrollHeight
     }
 
-    function renderAgentResult(data) {
+    function renderAgentResult(data, thinking) {
       const analysis = data.analysis || {}
       const thought = data.agentThought || {}
       const knowledge = filterKnowledgeMatches(data.knowledgeMatches)
@@ -1113,7 +1122,7 @@
         setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
       }
       const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
-      addMessage('agent', [
+      finalizeAgentMessage(thinking, [
         '<div>' + escapeHtml(localizeParamText(data.assistantMessage || '')) + '</div>', renderAgentThought(thought, analysis),
         knowledge ? '<div class="agent-block"><strong>参考知识</strong><ul>' + knowledge + '</ul></div>' : '',
         deltas ? '<div class="agent-block"><strong>本轮调整</strong><div class="deltas">' + deltas + '</div></div>' : '',
@@ -1179,9 +1188,9 @@
         const data = await readReactStream(response, thinking)
         if (!data) throw new Error('Agent 没有返回最终结果')
         sessionId = data.sessionId
-        renderAgentResult(data)
+        renderAgentResult(data, thinking)
       } catch (error) {
-        addMessage('agent', 'Agent 没有完成本轮请求：' + escapeHtml(error.message || '未知错误'))
+        finalizeAgentMessage(thinking, 'Agent 没有完成本轮请求：' + escapeHtml(error.message || '未知错误'))
       } finally {
         send.disabled = false
       }

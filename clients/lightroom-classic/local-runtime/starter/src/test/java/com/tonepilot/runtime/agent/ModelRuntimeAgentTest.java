@@ -76,6 +76,50 @@ class ModelRuntimeAgentTest {
     }
 
     @Test
+    void userPromptIncludesPhotoMetadataAndPreviewReference() {
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "userPrompt",
+                new AgentInput(
+                        "帮我优化照片",
+                        Map.of("Temperature", 4200),
+                        java.util.List.of(),
+                        Map.of("fileName", "DSCF1709.RAF", "camera", "Fujifilm GFX100RF"),
+                        "/files/selected-preview.jpg?t=1782890000"
+                )
+        );
+
+        assertThat(prompt).contains("用户意图");
+        assertThat(prompt).contains("当前照片元数据");
+        assertThat(prompt).contains("DSCF1709.RAF");
+        assertThat(prompt).contains("当前照片预览");
+    }
+
+    @Test
+    void visionModelBuildsMultimodalMessageWithImageUrl() {
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+
+        Map<String, Object> payload = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "buildChatRequestPayload",
+                "qwen2",
+                "qwen-vl-plus",
+                "system prompt",
+                "user prompt",
+                "data:image/jpeg;base64,abc"
+        );
+
+        java.util.List<Map<String, Object>> messages = (java.util.List<Map<String, Object>>) payload.get("messages");
+        Object userContent = messages.get(1).get("content");
+        assertThat(userContent).isInstanceOf(java.util.List.class);
+        assertThat(String.valueOf(userContent)).contains("image_url");
+        assertThat(String.valueOf(userContent)).contains("data:image/jpeg;base64,abc");
+    }
+
+
+    @Test
     void parsesMainAgentThoughtFromModelResult() {
         ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
         ReflectionTestUtils.setField(modelAgent, "traceLogger", mock(RuntimeTraceLogger.class));

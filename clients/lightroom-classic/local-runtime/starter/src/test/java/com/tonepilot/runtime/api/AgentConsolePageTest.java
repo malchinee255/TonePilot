@@ -65,6 +65,21 @@ class AgentConsolePageTest {
     }
 
     @Test
+    void replacesThinkingMessageWithFinalAgentResult() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("renderAgentResult(data, thinking)");
+        assertThat(html).contains("finalizeAgentMessage");
+        assertThat(html).contains("thinking.classList.remove('thinking-message')");
+        assertThat(html).doesNotContain("renderAgentResult(data)\n      } catch");
+    }
+
+
+    @Test
     void usesReturnedAfterPreviewUrlWhenApplyJobFinishes() throws Exception {
         String html;
         try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
