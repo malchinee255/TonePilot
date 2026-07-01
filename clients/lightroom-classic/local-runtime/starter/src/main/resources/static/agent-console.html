@@ -1027,7 +1027,8 @@
             setStatus(photoStatus, 'Lightroom 工具执行失败', 'warn')
             return
           }
-          setComparison(beforeUrl || lastBeforeUrl, result.previewUrl || '', currentPhoto?.photo?.fileName || '', '', jobId)
+          const afterUrl = result.afterPreviewUrl || result.previewUrl || ''
+          setComparison(beforeUrl || lastBeforeUrl, afterUrl, currentPhoto?.photo?.fileName || '', '', jobId)
           addMessage('agent', 'Lightroom 已完成调色。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
           setStatus(photoStatus, 'Lightroom 已完成调色', 'ok')
           await pollPhoto()

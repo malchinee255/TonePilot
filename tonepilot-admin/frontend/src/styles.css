@@ -272,3 +272,79 @@ body {
 .panel-title.compact {
   margin-top: 8px;
 }
+
+
+.runtime-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.runtime-stat {
+  padding: 10px 12px;
+  border: 1px solid #343434;
+  border-radius: 6px;
+  background: #1f1f1f;
+}
+
+.runtime-stat strong,
+.runtime-stat span {
+  display: block;
+}
+
+.runtime-stat strong {
+  color: #f1f5f8;
+  font-size: 18px;
+}
+
+.runtime-stat span {
+  margin-top: 2px;
+  color: #a6a6a6;
+  font-size: 12px;
+}
+
+.runtime-tree {
+  height: 420px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #343434;
+  border-radius: 6px;
+  background: #1d1d1d;
+}
+
+.runtime-tree,
+.runtime-tree .el-tree-node__content {
+  background: #1d1d1d;
+  color: #d7d9dc;
+}
+
+.runtime-tree .el-tree-node__content {
+  min-height: 34px;
+}
+
+.runtime-tree .el-tree-node__content:hover,
+.runtime-tree .el-tree-node.is-current > .el-tree-node__content {
+  background: #2d343a;
+}
+
+.runtime-tree-node {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-title {
+  color: #f0f0f0;
+  font-weight: 650;
+}
+
+.tree-summary {
+  min-width: 0;
+  max-width: 520px;
+  color: #a6a6a6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

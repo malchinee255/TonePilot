@@ -104,12 +104,14 @@ public class FileLightroomToolRepository implements LightroomToolRepository {
                     result.put(line.substring(0, index), line.substring(index + 1));
                 }
             }
+            String previewUrl = String.valueOf(result.getOrDefault("previewUrl", ""));
             return Map.of(
                     "success", "true".equals(String.valueOf(result.get("success"))),
                     "pending", false,
                     "jobId", jobId,
                     "message", String.valueOf(result.getOrDefault("message", "")),
-                    "previewUrl", String.valueOf(result.getOrDefault("previewUrl", ""))
+                    "previewUrl", previewUrl,
+                    "afterPreviewUrl", previewUrl
             );
         } catch (Exception exception) {
             traceLogger.error("lightroom.apply.result.read_failed", jobId, Map.of(

@@ -335,24 +335,36 @@
             <el-button type="primary" @click="loadRuntimeEvents">查询</el-button>
           </div>
 
-          <el-table :data="runtimeEvents" height="420" highlight-current-row @row-click="selectRuntimeEvent">
-            <el-table-column prop="createdAt" label="时间" width="190">
-              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
-            </el-table-column>
-            <el-table-column prop="eventType" label="事件" width="220" />
-            <el-table-column prop="sessionId" label="会话" min-width="170" show-overflow-tooltip />
-            <el-table-column label="Trace" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ runtimePayload(row).traceId || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="摘要" min-width="240" show-overflow-tooltip>
-              <template #default="{ row }">{{ runtimeSummary(row) }}</template>
-            </el-table-column>
-          </el-table>
+          <div class="runtime-overview">
+            <div class="runtime-stat"><strong>{{ runtimeEventStats.sessionCount }}</strong><span>会话</span></div>
+            <div class="runtime-stat"><strong>{{ runtimeEventStats.traceCount }}</strong><span>Trace</span></div>
+            <div class="runtime-stat"><strong>{{ runtimeEventStats.eventCount }}</strong><span>事件</span></div>
+          </div>
+
+          <el-tree
+            class="runtime-tree"
+            :data="runtimeTree"
+            node-key="id"
+            default-expand-all
+            highlight-current
+            empty-text="暂无运行时事件"
+            @node-click="selectRuntimeTreeNode"
+          >
+            <template #default="{ data }">
+              <div class="runtime-tree-node" :class="`node-${data.type}`">
+                <span class="tree-title">{{ data.label }}</span>
+                <el-tag v-if="data.badge" :type="runtimeNodeTagType(data.type)" size="small" effect="plain">
+                  {{ data.badge }}
+                </el-tag>
+                <span v-if="data.summary" class="tree-summary">{{ data.summary }}</span>
+              </div>
+            </template>
+          </el-tree>
 
           <div class="runtime-detail">
             <div class="detail-heading">
               <span>事件详情</span>
-              <el-tag v-if="selectedRuntimeEvent" size="small" effect="plain">{{ selectedRuntimeEvent.eventType }}</el-tag>
+              <el-tag v-if="selectedRuntimeEvent" size="small" effect="plain">{{ eventTypeLabel(selectedRuntimeEvent.eventType) }}</el-tag>
             </div>
             <pre>{{ selectedRuntimePayload || '选择一条运行时事件后查看完整 payload。' }}</pre>
           </div>
@@ -411,6 +423,17 @@ import {
 } from '@element-plus/icons-vue'
 import { api, unwrap } from './api'
 
+
+type RuntimeTreeNode = {
+  id: string
+  type: 'user' | 'session' | 'trace' | 'event'
+  label: string
+  badge?: string
+  summary?: string
+  event?: any
+  children?: RuntimeTreeNode[]
+}
+
 const activeView = ref('styles')
 const styles = ref<any[]>([])
 const adminKnowledge = ref<any[]>([])
@@ -436,6 +459,44 @@ const runtimeFilters = reactive({
   eventType: '',
   limit: 200
 })
+
+const runtimeEventLabels: Record<string, string> = {
+  'agent.thought': '主 Agent 判断',
+  'agent.final': 'Agent 完成',
+  'agent.error': 'Agent 异常',
+  'agent.intent.analyzed': '意图分析',
+  'model.request': '模型请求',
+  'model.response': '模型返回',
+  'model.parse.analysis_only': '模型解析',
+  'llm.request': '模型请求',
+  'llm.response': '模型返回',
+  'lightroom.apply.submitted': 'Lightroom 工具提交',
+  'lightroom.apply.status.finished': 'Lightroom 工具结果',
+  'lightroom.apply.status.pending': 'Lightroom 工具处理中',
+  'tool.lightroom.apply.result': 'Lightroom 工具结果',
+  'api.selected_photo.request': '读取当前照片',
+  'api.status.request': '运行时状态检查',
+  'api.file.request': '预览文件读取'
+}
+
+const currentRuntimeDevice = computed(() => runtimeDevices.value.find(device => device.userId === runtimeFilters.userId))
+
+const runtimeEventStats = computed(() => {
+  const sessions = new Set<string>()
+  const traces = new Set<string>()
+  runtimeEvents.value.forEach((event, eventIndex) => {
+    sessions.add(event.sessionId || '无会话')
+    traces.add(payloadTraceId(event) || '无 Trace')
+  })
+  return {
+    sessionCount: sessions.size,
+    traceCount: traces.size,
+    eventCount: runtimeEvents.value.length
+  }
+})
+
+const runtimeTree = computed<RuntimeTreeNode[]>(() => buildRuntimeTree())
+
 
 const styleForm = reactive({
   styleName: '夜景电影感',
@@ -743,6 +804,83 @@ async function loadRuntimeEvents() {
   }))
   selectedRuntimeEvent.value = runtimeEvents.value[0]
   selectedRuntimePayload.value = selectedRuntimeEvent.value ? prettyPayload(selectedRuntimeEvent.value) : ''
+}
+
+function buildRuntimeTree(): RuntimeTreeNode[] {
+  if (!runtimeFilters.userId) return []
+  const device = currentRuntimeDevice.value
+  const root: RuntimeTreeNode = {
+    id: `user:${runtimeFilters.userId}`,
+    type: 'user',
+    label: `用户：${runtimeFilters.userId}`,
+    badge: device?.deviceName || 'TonePilot Local Runtime',
+    summary: device?.lastSeenAt ? `最近在线：${formatTime(device.lastSeenAt)}` : ''
+  }
+  const sessionMap = new Map<string, RuntimeTreeNode>()
+  runtimeEvents.value.forEach((event, eventIndex) => {
+    const sessionId = event.sessionId || '无会话'
+    if (!sessionMap.has(sessionId)) {
+      sessionMap.set(sessionId, {
+        id: `session:${sessionId}`,
+        type: 'session',
+        label: `会话：${sessionId}`,
+        badge: 'Session',
+        children: []
+      })
+    }
+    const sessionNode = sessionMap.get(sessionId)!
+    const traceId = payloadTraceId(event) || '无 Trace'
+    let traceNode = sessionNode.children!.find(child => child.id === `trace:${sessionId}:${traceId}`)
+    if (!traceNode) {
+      traceNode = {
+        id: `trace:${sessionId}:${traceId}`,
+        type: 'trace',
+        label: `Trace：${traceId}`,
+        badge: 'Trace',
+        children: []
+      }
+      sessionNode.children!.push(traceNode)
+    }
+    traceNode.children!.push({
+      id: `event:${event.id || event.createdAt || eventIndex}`,
+      type: 'event',
+      label: `${formatTime(event.createdAt)} · ${eventTypeLabel(event.eventType)}`,
+      badge: event.eventType,
+      summary: runtimeSummary(event),
+      event
+    })
+  })
+  root.children = Array.from(sessionMap.values()).map(session => ({
+    ...session,
+    summary: `${countEventChildren(session)} 个事件`
+  }))
+  return [root]
+}
+
+function countEventChildren(node: RuntimeTreeNode): number {
+  if (node.type === 'event') return 1
+  return (node.children || []).reduce((total, child) => total + countEventChildren(child), 0)
+}
+
+function eventTypeLabel(type: string) {
+  return runtimeEventLabels[type] || type || '未知事件'
+}
+
+function runtimeNodeTagType(type: RuntimeTreeNode['type']) {
+  if (type === 'user') return 'primary'
+  if (type === 'session') return 'success'
+  if (type === 'trace') return 'warning'
+  return 'info'
+}
+
+function selectRuntimeTreeNode(node: RuntimeTreeNode) {
+  if (node.event) {
+    selectRuntimeEvent(node.event)
+  }
+}
+
+function payloadTraceId(row: any) {
+  return runtimePayload(row).traceId || ''
 }
 
 function selectRuntimeEvent(row: any) {

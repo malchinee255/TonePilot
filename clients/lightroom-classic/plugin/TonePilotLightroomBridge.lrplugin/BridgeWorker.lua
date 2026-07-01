@@ -1,6 +1,7 @@
 local LrApplication = import "LrApplication"
 local LrFileUtils = import "LrFileUtils"
 local LrFunctionContext = import "LrFunctionContext"
+local LrExportSession = import "LrExportSession"
 local LrPathUtils = import "LrPathUtils"
 local LrTasks = import "LrTasks"
 
@@ -10,7 +11,7 @@ local BridgeWorker = {
     running = false
 }
 
-local WORKER_BUILD = 19
+local WORKER_BUILD = 20
 local lastPreviewKey = ""
 local lastPreviewAt = 0
 local lastMetadataDebugKey = ""
@@ -564,6 +565,18 @@ function exportPreview(photo, previewPath)
     local previewDir = LrPathUtils.parent(previewPath)
     createDirectory(previewDir)
 
+    local thumbnailOk, thumbnailError = LrTasks.pcall(function()
+        exportPreviewThumbnail(photo, previewPath)
+    end)
+    if thumbnailOk then
+        return
+    end
+
+    writeDiagnostic("preview-thumbnail-error.txt", tostring(thumbnailError))
+    exportPreviewRendition(photo, previewPath)
+end
+
+function exportPreviewThumbnail(photo, previewPath)
     local jpegData = nil
     local startedAt = os.time()
     local retrySeconds = Config.previewRetrySeconds or 20
@@ -590,6 +603,50 @@ function exportPreview(photo, previewPath)
         end
     end
     writeBinaryFile(previewPath, jpegData)
+end
+
+function exportPreviewRendition(photo, previewPath)
+    local previewDir = LrPathUtils.parent(previewPath)
+    local tempDir = LrPathUtils.child(previewDir, "tonepilot-export-" .. tostring(os.time()))
+    createDirectory(tempDir)
+
+    local exportSession = LrExportSession {
+        photosToExport = { photo },
+        exportSettings = {
+            LR_export_destinationType = "specificFolder",
+            LR_export_destinationPathPrefix = tempDir,
+            LR_export_useSubfolder = false,
+            LR_format = "JPEG",
+            LR_jpeg_quality = 0.82,
+            LR_size_doConstrain = true,
+            LR_size_resizeType = "wh",
+            LR_size_maxWidth = 1200,
+            LR_size_maxHeight = 1200,
+            LR_minimizeEmbeddedMetadata = true,
+            LR_outputSharpeningOn = false
+        }
+    }
+
+    local renderedPath = nil
+    for _, rendition in exportSession:renditions { stopIfCanceled = true } do
+        local success, pathOrMessage = rendition:waitForRender()
+        if success then
+            renderedPath = pathOrMessage
+        else
+            error("Lightroom 导出预览失败：" .. tostring(pathOrMessage))
+        end
+    end
+
+    if renderedPath == nil or not LrFileUtils.exists(renderedPath) then
+        error("Lightroom 导出预览失败：没有生成渲染文件")
+    end
+    if LrFileUtils.exists(previewPath) then
+        LrFileUtils.delete(previewPath)
+    end
+    local moved = LrFileUtils.move(renderedPath, previewPath)
+    if moved == nil and not LrFileUtils.exists(previewPath) then
+        error("Lightroom 导出预览失败：无法移动渲染文件")
+    end
 end
 
 function writeHeartbeat()

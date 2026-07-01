@@ -63,4 +63,17 @@ class AgentConsolePageTest {
         assertThat(html).doesNotContain("Agent 执行过程");
         assertThat(html).doesNotContain("读取 Lightroom 当前照片和调色上下文");
     }
+
+    @Test
+    void usesReturnedAfterPreviewUrlWhenApplyJobFinishes() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("result.afterPreviewUrl || result.previewUrl");
+        assertThat(html).contains("setComparison(beforeUrl || lastBeforeUrl, afterUrl");
+    }
+
 }
