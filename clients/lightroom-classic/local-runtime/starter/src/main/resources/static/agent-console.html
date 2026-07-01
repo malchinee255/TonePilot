@@ -706,6 +706,72 @@
       model: ['模型设置', '配置 OpenAI 或阿里 Qwen2']
     }
 
+    const PARAM_LABELS = {
+      Exposure2012: '曝光',
+      Contrast2012: '对比度',
+      Highlights2012: '高光',
+      Shadows2012: '阴影',
+      Whites2012: '白色色阶',
+      Blacks2012: '黑色色阶',
+      Texture: '纹理',
+      Clarity2012: '清晰度',
+      Dehaze: '去朦胧',
+      Vibrance: '自然饱和度',
+      Saturation: '饱和度',
+      Temperature: '色温',
+      Tint: '色调',
+      Sharpness: '锐化',
+      SharpenRadius: '锐化半径',
+      SharpenDetail: '锐化细节',
+      SharpenEdgeMasking: '锐化蒙版',
+      LuminanceSmoothing: '明亮度降噪',
+      LuminanceNoiseReductionDetail: '明亮度降噪细节',
+      LuminanceNoiseReductionContrast: '明亮度降噪对比',
+      ColorNoiseReduction: '颜色降噪',
+      ColorNoiseReductionDetail: '颜色降噪细节',
+      ColorNoiseReductionSmoothness: '颜色降噪平滑度',
+      PostCropVignetteAmount: '暗角',
+      PostCropVignetteMidpoint: '暗角中点',
+      PostCropVignetteRoundness: '暗角圆度',
+      PostCropVignetteFeather: '暗角羽化',
+      PostCropVignetteHighlightContrast: '暗角高光保护',
+      GrainAmount: '颗粒数量',
+      GrainSize: '颗粒大小',
+      GrainFrequency: '颗粒粗细',
+      RedHue: '红色色相',
+      RedSaturation: '红色饱和度',
+      RedLuminance: '红色明亮度',
+      OrangeHue: '橙色色相',
+      OrangeSaturation: '橙色饱和度',
+      OrangeLuminance: '橙色明亮度',
+      YellowHue: '黄色色相',
+      YellowSaturation: '黄色饱和度',
+      YellowLuminance: '黄色明亮度',
+      GreenHue: '绿色色相',
+      GreenSaturation: '绿色饱和度',
+      GreenLuminance: '绿色明亮度',
+      AquaHue: '浅绿色相',
+      AquaSaturation: '浅绿饱和度',
+      AquaLuminance: '浅绿明亮度',
+      BlueHue: '蓝色色相',
+      BlueSaturation: '蓝色饱和度',
+      BlueLuminance: '蓝色明亮度',
+      PurpleHue: '紫色色相',
+      PurpleSaturation: '紫色饱和度',
+      PurpleLuminance: '紫色明亮度',
+      MagentaHue: '洋红色相',
+      MagentaSaturation: '洋红饱和度',
+      MagentaLuminance: '洋红明亮度',
+      RedPrimaryHue: '红原色色相',
+      RedPrimarySaturation: '红原色饱和度',
+      GreenPrimaryHue: '绿原色色相',
+      GreenPrimarySaturation: '绿原色饱和度',
+      BluePrimaryHue: '蓝原色色相',
+      BluePrimarySaturation: '蓝原色饱和度',
+      ShadowTint: '阴影色调',
+      CropAngle: '裁剪角度'
+    }
+
     function activateLeftTab(name) {
       leftTabButtons.forEach(button => button.classList.toggle('active', button.dataset.leftTab === name))
       leftPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.leftPanel === name))
@@ -716,6 +782,37 @@
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+    }
+
+    function paramDisplayName(name) {
+      const key = String(name || '').trim()
+      return PARAM_LABELS[key] || key.replace(/2012$/, '').replace(/([a-z])([A-Z])/g, '$1 $2') || '参数'
+    }
+
+    function localizeParamText(value) {
+      let text = String(value ?? '')
+      Object.keys(PARAM_LABELS)
+        .sort((a, b) => b.length - a.length)
+        .forEach(key => {
+          const spacedKey = key.replace(/2012$/, '').replace(/([a-z])([A-Z])/g, '$1 $2')
+          text = text.replaceAll(key, PARAM_LABELS[key])
+          text = text.replaceAll(spacedKey, PARAM_LABELS[key])
+        })
+      return text.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2')
+    }
+
+    function formatDeltaValue(delta) {
+      const before = delta.beforeValue ?? '-'
+      const after = delta.afterValue ?? '-'
+      const change = delta.delta === undefined || delta.delta === null || delta.delta === '' ? '' : '，变化 ' + delta.delta
+      return '从 ' + before + ' 调到 ' + after + change
+    }
+
+    function filterKnowledgeMatches(matches) {
+      return (matches || []).filter(item => {
+        const text = [item.title, item.summary, item.content].map(value => String(value || '')).join(' ')
+        return !text.includes('本地知识库未启用') && !text.includes('未启用')
+      })
     }
 
     function setStatus(node, text, type) {
@@ -869,19 +966,26 @@
     }
 
     function renderAgentThought(thought, analysis) {
-      const observations = (thought.observations || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
-      const toolPlan = (thought.toolPlan || []).map(item => '<li>' + escapeHtml(item) + '</li>').join('')
+      const observations = (thought.observations || [])
+        .slice(0, 4)
+        .map(item => '<li>' + escapeHtml(localizeParamText(item)) + '</li>')
+        .join('')
+      const summary = localizeParamText(thought.summary || analysis.recommendedStyle || '')
+      const reason = localizeParamText(thought.reasoningVisible || '')
+      const nextAction = localizeParamText(thought.nextAction || '')
+      const fallback = !summary && !reason
+        ? '<div><strong>意图</strong><br />' + escapeHtml(localizeParamText(analysis.intent || '-')) + '</div>'
+          + '<div><strong>照片类型</strong><br />' + escapeHtml(localizeParamText(analysis.photoType || '-')) + '</div>'
+          + '<div><strong>建议方向</strong><br />' + escapeHtml(localizeParamText(analysis.recommendedStyle || '-')) + '</div>'
+        : ''
       return [
-        '<div class="agent-block">', '<strong>主 Agent 判断</strong>',
-        thought.summary ? '\n' + escapeHtml(thought.summary) : '',
-        observations ? '\n\n<strong>观察到的线索</strong><ul>' + observations + '</ul>' : '',
-        thought.reasoningVisible ? '\n<strong>判断依据</strong>\n' + escapeHtml(thought.reasoningVisible) : '',
-        thought.decision ? '\n\n<strong>本轮决策</strong>\n' + escapeHtml(labelDecision(thought.decision)) : '',
-        thought.nextAction ? '\n\n<strong>下一步</strong>\n' + escapeHtml(thought.nextAction) : '',
-        toolPlan ? '\n\n<strong>准备使用的工具动作</strong><ul>' + toolPlan + '</ul>' : '',
-        (!thought.summary && !observations && !thought.reasoningVisible)
-          ? '\n<strong>意图</strong>\n' + escapeHtml(analysis.intent || '-') + '\n\n<strong>照片类型</strong>\n' + escapeHtml(analysis.photoType || '-') + '\n\n<strong>建议方向</strong>\n' + escapeHtml(analysis.recommendedStyle || '-')
-          : '',
+        '<div class="agent-block">',
+        '<strong>主 Agent 判断</strong>',
+        summary ? '<p>' + escapeHtml(summary) + '</p>' : '',
+        observations ? '<strong>我看到的重点</strong><ul>' + observations + '</ul>' : '',
+        reason ? '<strong>为什么这样修</strong><p>' + escapeHtml(reason) + '</p>' : '',
+        nextAction ? '<strong>下一步</strong><p>' + escapeHtml(nextAction) + '</p>' : '',
+        fallback,
         '</div>'
       ].join('')
     }
@@ -913,9 +1017,9 @@
       line.className = 'thinking-line'
       line.dataset.eventType = type
       if (type === 'agent.thought') {
-        line.innerHTML = '<span class="thinking-dot"></span><div><strong>主 Agent 判断</strong><br />' + escapeHtml(content) + '</div>'
+        line.innerHTML = '<span class="thinking-dot"></span><div><strong>主 Agent 判断</strong><br />' + escapeHtml(localizeParamText(content)) + '</div>'
       } else {
-        line.innerHTML = '<span class="thinking-dot"></span><div><strong>Agent 异常</strong><br />' + escapeHtml(content) + '</div>'
+        line.innerHTML = '<span class="thinking-dot"></span><div><strong>Agent 异常</strong><br />' + escapeHtml(localizeParamText(content)) + '</div>'
       }
       container.querySelector('.thinking-card')?.appendChild(line)
       chat.scrollTop = chat.scrollHeight
@@ -924,28 +1028,32 @@
     function renderAgentResult(data) {
       const analysis = data.analysis || {}
       const thought = data.agentThought || {}
-      const knowledge = (data.knowledgeMatches || []).map(item => '<li><strong>' + escapeHtml(item.title || '知识') + '</strong>：' + escapeHtml(item.summary || item.content || '') + '</li>').join('')
-      const deltas = (data.deltas || []).map(delta => '<div class="delta"><strong>' + escapeHtml(delta.label || delta.name) + '</strong><span>' + escapeHtml(delta.beforeValue) + ' -> ' + escapeHtml(delta.afterValue) + ' (' + escapeHtml(delta.delta) + ')</span></div>').join('')
+      const knowledge = filterKnowledgeMatches(data.knowledgeMatches)
+        .map(item => '<li><strong>' + escapeHtml(localizeParamText(item.title || '知识')) + '</strong>：' + escapeHtml(localizeParamText(item.summary || item.content || '')) + '</li>')
+        .join('')
+      const deltas = (data.deltas || [])
+        .map(delta => '<div class="delta"><strong>' + escapeHtml(paramDisplayName(delta.label || delta.name)) + '</strong><span>' + escapeHtml(formatDeltaValue(delta)) + '</span></div>')
+        .join('')
       const localPlans = (data.localAdjustments || []).map(plan => {
         const region = plan.region ? JSON.stringify(plan.region) : '-'
-        const settings = plan.settings ? JSON.stringify(plan.settings) : '{}'
-        return '<div class="delta"><strong>' + escapeHtml(plan.target || plan.type || '局部区域') + '</strong><span>' + escapeHtml(plan.type || '-') + ' / ' + escapeHtml(plan.coordinateSpace || 'normalized_crop') + '<br />区域：' + escapeHtml(region) + '<br />参数：' + escapeHtml(settings) + '<br />' + escapeHtml(plan.reason || '') + '</span></div>'
+        const settings = plan.settings ? localizeParamText(JSON.stringify(plan.settings)) : '{}'
+        return '<div class="delta"><strong>' + escapeHtml(localizeParamText(plan.target || plan.type || '局部区域')) + '</strong><span>' + escapeHtml(localizeParamText(plan.type || '-')) + ' / ' + escapeHtml(plan.coordinateSpace || 'normalized_crop') + '<br />区域：' + escapeHtml(region) + '<br />参数：' + escapeHtml(settings) + '<br />' + escapeHtml(localizeParamText(plan.reason || '')) + '</span></div>'
       }).join('')
       analysisSummary.innerHTML = [
-        '<div><strong>意图</strong><br />' + escapeHtml(analysis.intent || '-') + '</div>',
-        '<div><strong>照片类型</strong><br />' + escapeHtml(analysis.photoType || '-') + '</div>',
-        '<div><strong>修图方向</strong><br />' + escapeHtml(analysis.recommendedStyle || '-') + '</div>'
+        '<div><strong>意图</strong><br />' + escapeHtml(localizeParamText(analysis.intent || '-')) + '</div>',
+        '<div><strong>照片类型</strong><br />' + escapeHtml(localizeParamText(analysis.photoType || '-')) + '</div>',
+        '<div><strong>修图方向</strong><br />' + escapeHtml(localizeParamText(analysis.recommendedStyle || '-')) + '</div>'
       ].join('')
       if (data.beforePreviewUrl || data.afterPreviewUrl) {
         setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
       }
       const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
       addMessage('agent', [
-        '<div>' + escapeHtml(data.assistantMessage || '') + '</div>', renderAgentThought(thought, analysis),
-        knowledge ? '<div class="agent-block"><strong>知识库匹配</strong><ul>' + knowledge + '</ul></div>' : '',
-        deltas ? '<div class="agent-block"><strong>全局调色参数</strong><div class="deltas">' + deltas + '</div></div>' : '',
+        '<div>' + escapeHtml(localizeParamText(data.assistantMessage || '')) + '</div>', renderAgentThought(thought, analysis),
+        knowledge ? '<div class="agent-block"><strong>参考知识</strong><ul>' + knowledge + '</ul></div>' : '',
+        deltas ? '<div class="agent-block"><strong>本轮调整</strong><div class="deltas">' + deltas + '</div></div>' : '',
         localPlans ? '<div class="agent-block"><strong>局部蒙版计划</strong><div class="deltas">' + localPlans + '</div></div>' : '',
-        data.action === 'tool_submitted' ? '<div class="agent-block">我已经调用 Lightroom 全局调色工具，正在等待本地插件处理完成。</div>' : '',
+        data.action === 'tool_submitted' ? '<div class="agent-block">正在应用到 Lightroom，完成后会刷新修图后预览。</div>' : '',
         suggestedReplies ? '<div class="agent-actions">' + suggestedReplies + '</div>' : ''
       ].join(''))
       chat.querySelectorAll('button[data-reply]').forEach(button => {

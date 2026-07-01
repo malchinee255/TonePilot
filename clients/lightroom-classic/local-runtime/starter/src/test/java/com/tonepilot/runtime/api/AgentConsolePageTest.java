@@ -76,4 +76,23 @@ class AgentConsolePageTest {
         assertThat(html).contains("setComparison(beforeUrl || lastBeforeUrl, afterUrl");
     }
 
+
+    @Test
+    void localizesLightroomParameterNamesForUserFacingMessages() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("const PARAM_LABELS");
+        assertThat(html).contains("Exposure2012: '曝光'");
+        assertThat(html).contains("BlueSaturation: '蓝色饱和度'");
+        assertThat(html).contains("localizeParamText");
+        assertThat(html).contains("paramDisplayName(delta.label || delta.name)");
+        assertThat(html).contains("formatDeltaValue(delta)");
+        assertThat(html).contains("filterKnowledgeMatches");
+        assertThat(html).contains("本轮调整");
+    }
+
 }
