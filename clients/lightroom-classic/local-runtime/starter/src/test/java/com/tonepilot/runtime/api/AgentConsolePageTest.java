@@ -56,6 +56,8 @@ class AgentConsolePageTest {
         assertThat(html).contains("renderAgentThought");
         assertThat(html).contains("/api/lightroom-agent/chat/stream");
         assertThat(html).contains("appendReactEvent");
+        assertThat(html).contains("isVisibleReactEvent");
+        assertThat(html).contains("return type === 'agent.thought' || type === 'agent.error'");
         assertThat(html).contains("agent.thought");
         assertThat(html).contains("agent.final");
         assertThat(html).doesNotContain("Agent 执行过程");

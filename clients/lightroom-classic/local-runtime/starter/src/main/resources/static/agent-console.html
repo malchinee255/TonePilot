@@ -895,19 +895,29 @@
       return node
     }
 
+    function isVisibleReactEvent(event) {
+      const type = event && event.type ? event.type : ''
+      return type === 'agent.thought' || type === 'agent.error'
+    }
+
     function appendReactEvent(container, event) {
       if (!container || !event) return
       const type = event.type || ''
-      const title = event.title || type
+      const statusLine = container.querySelector('.thinking-card > div:nth-child(2)')
+      if (!isVisibleReactEvent(event)) {
+        if (statusLine && type !== 'agent.final') statusLine.textContent = '主 Agent 正在综合照片、上下文、知识库和 Lightroom 工具结果。'
+        return
+      }
       const content = event.content || ''
       const line = document.createElement('div')
       line.className = 'thinking-line'
       line.dataset.eventType = type
-      line.innerHTML = '<span class="thinking-dot"></span><div><strong>' + escapeHtml(title) + '</strong><br />' + escapeHtml(content) + '</div>'
-      container.querySelector('.thinking-card')?.appendChild(line)
       if (type === 'agent.thought') {
         line.innerHTML = '<span class="thinking-dot"></span><div><strong>主 Agent 判断</strong><br />' + escapeHtml(content) + '</div>'
+      } else {
+        line.innerHTML = '<span class="thinking-dot"></span><div><strong>Agent 异常</strong><br />' + escapeHtml(content) + '</div>'
       }
+      container.querySelector('.thinking-card')?.appendChild(line)
       chat.scrollTop = chat.scrollHeight
     }
 
