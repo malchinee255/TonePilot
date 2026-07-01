@@ -125,4 +125,22 @@ class AgentConsolePageTest {
         assertThat(html).contains("本轮调整");
     }
 
+    @Test
+    void persistsChatAndColorVersionsInLocalPhotoSession() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("tonepilot.agent.photoSessions.v1");
+        assertThat(html).contains("loadPhotoSession");
+        assertThat(html).contains("savePhotoSession");
+        assertThat(html).contains("restoreChatForPhoto");
+        assertThat(html).contains("recordApplyVersion");
+        assertThat(html).contains("messages");
+        assertThat(html).contains("versions");
+    }
+
+
 }

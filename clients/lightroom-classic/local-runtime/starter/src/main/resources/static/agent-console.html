@@ -700,6 +700,94 @@
     let comparisonPhotoKey = ''
     let lastBeforeUrl = ''
     let activeApplyJob = null
+    let currentChatPhotoKey = ''
+    let suppressChatPersist = false
+
+    const PHOTO_SESSION_STORAGE_KEY = 'tonepilot.agent.photoSessions.v1'
+    const DEFAULT_AGENT_HTML = '选择 Lightroom 照片后，直接告诉我你想要的效果。我会先分析意图和照片类型，再应用调色参数；之后你可以继续说“再亮一点”“肤色更通透”“绿色别那么脏”。'
+
+    function readPhotoSessions() {
+      try {
+        return JSON.parse(localStorage.getItem(PHOTO_SESSION_STORAGE_KEY) || '{}') || {}
+      } catch (error) {
+        return {}
+      }
+    }
+
+    function writePhotoSessions(sessions) {
+      localStorage.setItem(PHOTO_SESSION_STORAGE_KEY, JSON.stringify(sessions || {}))
+    }
+
+    function loadPhotoSession(photoKey, baselinePreviewUrl) {
+      if (!photoKey) return { photoKey: '', versions: [], messages: [] }
+      const sessions = readPhotoSessions()
+      const session = sessions[photoKey] || { photoKey, versions: [], messages: [] }
+      session.photoKey = photoKey
+      session.versions = Array.isArray(session.versions) ? session.versions : []
+      session.messages = Array.isArray(session.messages) ? session.messages : []
+      if (!session.baselinePreviewUrl && baselinePreviewUrl) {
+        session.baselinePreviewUrl = baselinePreviewUrl
+      }
+      sessions[photoKey] = session
+      writePhotoSessions(sessions)
+      return session
+    }
+
+    function savePhotoSession(session) {
+      if (!session?.photoKey) return
+      const sessions = readPhotoSessions()
+      sessions[session.photoKey] = session
+      writePhotoSessions(sessions)
+    }
+
+    function restoreChatForPhoto(session) {
+      currentChatPhotoKey = session?.photoKey || ''
+      sessionId = session?.sessionId || sessionId
+      suppressChatPersist = true
+      chat.innerHTML = ''
+      const messages = Array.isArray(session?.messages) ? session.messages : []
+      if (messages.length) {
+        messages.forEach(message => addMessage(message.role || 'agent', message.html || '', false))
+      } else {
+        addMessage('agent', DEFAULT_AGENT_HTML, false)
+      }
+      suppressChatPersist = false
+    }
+
+    function persistChatMessage(role, html) {
+      if (suppressChatPersist || !currentChatPhotoKey) return
+      const session = loadPhotoSession(currentChatPhotoKey, lastBeforeUrl)
+      session.sessionId = sessionId || session.sessionId
+      session.messages.push({ role, html, createdAt: new Date().toISOString() })
+      if (session.messages.length > 80) session.messages = session.messages.slice(-80)
+      savePhotoSession(session)
+    }
+
+    function recordApplyVersion(jobId, afterUrl) {
+      if (!activeApplyJob || !afterUrl) return
+      const photoKey = activeApplyJob.photoKey || comparisonPhotoKey || currentChatPhotoKey
+      if (!photoKey) return
+      const data = activeApplyJob.resultData || {}
+      const thought = data.agentThought || {}
+      const analysis = data.analysis || {}
+      const session = loadPhotoSession(photoKey, activeApplyJob.beforeUrl || lastBeforeUrl)
+      const version = {
+        versionId: jobId,
+        previewUrl: afterUrl,
+        beforePreviewUrl: activeApplyJob.beforeUrl || session.baselinePreviewUrl || lastBeforeUrl,
+        userIntent: analysis.intent || data.userIntent || '',
+        agentSummary: thought.summary || data.assistantMessage || 'Agent 修图',
+        deltas: data.deltas || [],
+        createdAt: new Date().toISOString()
+      }
+      session.sessionId = sessionId || session.sessionId
+      session.currentVersion = version
+      session.versions = (session.versions || []).filter(item => item.versionId !== jobId)
+      session.versions.unshift(version)
+      savePhotoSession(session)
+      renderVersions(session, activeApplyJob.photoName || currentPhoto?.photo?.fileName || '')
+    }
+
 
     const leftPanelCopy = {
       photo: ['当前照片', '预览、元数据和 Agent 判断'],
@@ -821,12 +909,13 @@
       node.className = 'status' + (type ? ' ' + type : '')
     }
 
-    function addMessage(role, html) {
+    function addMessage(role, html, persist = true) {
       const node = document.createElement('div')
       node.className = 'message ' + role
       node.innerHTML = '<span class="role">' + (role === 'user' ? '你' : 'Agent') + '</span>' + html
       chat.appendChild(node)
       chat.scrollTop = chat.scrollHeight
+      if (persist) persistChatMessage(role, html)
       return node
     }
 
@@ -861,14 +950,15 @@
       return !!activeApplyJob && (!photoKey || !activeApplyJob.photoKey || activeApplyJob.photoKey === photoKey)
     }
 
-    function lockApplyComparison(jobId, beforeUrl, photoName, photoKey) {
+    function lockApplyComparison(jobId, beforeUrl, photoName, photoKey, resultData) {
       activeApplyJob = {
         jobId,
         beforeUrl: beforeUrl || lastBeforeUrl,
         afterUrl: '',
         photoName: photoName || currentPhoto?.photo?.fileName || '',
         photoKey: photoKey || comparisonPhotoKey,
-        startedAt: Date.now()
+        startedAt: Date.now(),
+        resultData
       }
       setComparison(activeApplyJob.beforeUrl, '', activeApplyJob.photoName, activeApplyJob.photoKey, jobId)
     }
@@ -884,6 +974,8 @@
         activeApplyJob.photoKey || comparisonPhotoKey,
         jobId
       )
+      recordApplyVersion(jobId, activeApplyJob.afterUrl)
+      activeApplyJob = null
     }
 
     async function fetchFreshSelectedPreviewAfterApply(jobId, startedAt) {
@@ -940,13 +1032,24 @@
         return
       }
       const photo = payload.photo || {}
-      const session = payload.session || {}
-      const photoKey = session.photoKey || ''
+      const backendSession = payload.session || {}
+      const photoKey = backendSession.photoKey || photo.path || photo.fileName || ''
       const photoName = photo.fileName || '当前照片'
+      const livePreviewUrl = payload.previewUrl || payload.baselinePreviewUrl || ''
+      const clientSession = loadPhotoSession(photoKey, livePreviewUrl)
+      const session = {
+        ...backendSession,
+        ...clientSession,
+        photoKey,
+        baselinePreviewUrl: clientSession.baselinePreviewUrl || backendSession.baselinePreviewUrl || livePreviewUrl,
+        currentVersion: clientSession.currentVersion || backendSession.currentVersion,
+        versions: clientSession.versions || backendSession.versions || []
+      }
+      if (!activeApplyJob && currentChatPhotoKey !== photoKey) restoreChatForPhoto(session)
       setStatus(photoStatus, 'Lightroom 已选中：' + photoName, 'ok')
       renderPhotoMeta(photo)
       renderVersions(session, photoName)
-      const selectedBeforeUrl = session.baselinePreviewUrl || payload.baselinePreviewUrl || payload.previewUrl || ''
+      const selectedBeforeUrl = session.baselinePreviewUrl || livePreviewUrl || ''
       const selectedAfterUrl = session.currentVersion?.previewUrl || ''
       const shouldSwitchPhoto = photoKey && comparisonPhotoKey && photoKey !== comparisonPhotoKey
       if (shouldSwitchPhoto) {
@@ -1068,6 +1171,7 @@
       thinking.className = 'message agent'
       thinking.innerHTML = '<span class="role">Agent</span>' + html
       chat.scrollTop = chat.scrollHeight
+      persistChatMessage('agent', html)
       return thinking
     }
 
@@ -1117,7 +1221,7 @@
         '<div><strong>修图方向</strong><br />' + escapeHtml(localizeParamText(analysis.recommendedStyle || '-')) + '</div>'
       ].join('')
       if (data.action === 'tool_submitted' && data.apply?.jobId) {
-        lockApplyComparison(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl, data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || comparisonPhotoKey)
+        lockApplyComparison(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl, data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || comparisonPhotoKey || currentChatPhotoKey, data)
       } else if (data.beforePreviewUrl || data.afterPreviewUrl) {
         setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
       }
@@ -1188,6 +1292,11 @@
         const data = await readReactStream(response, thinking)
         if (!data) throw new Error('Agent 没有返回最终结果')
         sessionId = data.sessionId
+        if (currentChatPhotoKey) {
+          const session = loadPhotoSession(currentChatPhotoKey, lastBeforeUrl)
+          session.sessionId = sessionId
+          savePhotoSession(session)
+        }
         renderAgentResult(data, thinking)
       } catch (error) {
         finalizeAgentMessage(thinking, 'Agent 没有完成本轮请求：' + escapeHtml(error.message || '未知错误'))
