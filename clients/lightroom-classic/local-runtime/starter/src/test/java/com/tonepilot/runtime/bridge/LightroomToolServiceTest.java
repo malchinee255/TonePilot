@@ -119,7 +119,9 @@ class LightroomToolServiceTest {
                 "BluePrimaryHue", -6,
                 "BluePrimarySaturation", 12,
                 "ParametricHighlights", -18,
-                "ParametricLights", 8
+                "ParametricLights", 8,
+                "ToneCurveName2012", "Custom",
+                "ToneCurvePV2012", List.of("0, 0", "32, 24", "128, 132", "224, 232", "255, 255")
         ), List.of(skyMask));
 
         Path job = Files.list(tempDir.resolve("apply-jobs"))
@@ -134,6 +136,8 @@ class LightroomToolServiceTest {
         assertThat(content).contains("[\"BluePrimaryHue\"]=-6");
         assertThat(content).contains("[\"ParametricHighlights\"]=-18");
         assertThat(content).contains("[\"ParametricLights\"]=8");
+        assertThat(content).contains("[\"ToneCurveName2012\"]=\"Custom\"");
+        assertThat(content).contains("[\"ToneCurvePV2012\"]={[1]=\"0, 0\",[2]=\"32, 24\",[3]=\"128, 132\",[4]=\"224, 232\",[5]=\"255, 255\",");
         assertThat(content).contains("[\"type\"]=\"linear_gradient\"");
         assertThat(content).contains("[\"feather\"]=0.65");
         assertThat(content).contains("[\"Dehaze\"]=20");

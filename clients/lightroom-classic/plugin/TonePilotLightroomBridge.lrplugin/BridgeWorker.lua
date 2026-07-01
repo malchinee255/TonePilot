@@ -13,7 +13,7 @@ local BridgeWorker = {
     running = false
 }
 
-local WORKER_BUILD = 22
+local WORKER_BUILD = 23
 local lastPreviewKey = ""
 local lastPreviewAt = 0
 local lastMetadataDebugKey = ""
@@ -504,6 +504,11 @@ function developPreviewSignature(photo)
         "ParametricShadowSplit",
         "ParametricMidtoneSplit",
         "ParametricHighlightSplit",
+        "ToneCurveName2012",
+        "ToneCurvePV2012",
+        "ToneCurvePV2012Red",
+        "ToneCurvePV2012Green",
+        "ToneCurvePV2012Blue",
         "Sharpness",
         "SharpenRadius",
         "SharpenDetail",
@@ -741,6 +746,11 @@ function currentAdjustmentFromPhoto(photo)
             parametricShadowSplit = intOrZero(settings.ParametricShadowSplit),
             parametricMidtoneSplit = intOrZero(settings.ParametricMidtoneSplit),
             parametricHighlightSplit = intOrZero(settings.ParametricHighlightSplit),
+            toneCurveName2012 = metadataValueToString(settings.ToneCurveName2012),
+            toneCurvePV2012 = metadataValueToString(settings.ToneCurvePV2012),
+            toneCurvePV2012Red = metadataValueToString(settings.ToneCurvePV2012Red),
+            toneCurvePV2012Green = metadataValueToString(settings.ToneCurvePV2012Green),
+            toneCurvePV2012Blue = metadataValueToString(settings.ToneCurvePV2012Blue),
             sharpness = intOrZero(settings.Sharpness),
             sharpenRadius = numberOrZero(settings.SharpenRadius),
             sharpenDetail = intOrZero(settings.SharpenDetail),

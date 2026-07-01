@@ -22,6 +22,7 @@ import com.tonepilot.infrastructure.observability.RuntimeTraceLogger;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -187,6 +188,8 @@ class ModelRuntimeAgentTest {
         assertThat(prompt).contains("ParametricShadows");
         assertThat(prompt).contains("ParametricHighlights");
         assertThat(prompt).contains("Tone Curve");
+        assertThat(prompt).contains("ToneCurvePV2012");
+        assertThat(prompt).contains("ToneCurvePV2012Red");
     }
 
     @Test
@@ -198,7 +201,7 @@ class ModelRuntimeAgentTest {
                   "choices": [
                     {
                       "message": {
-                        "content": "{\\"assistantMessage\\":\\"我会压暗天空并调整蓝色层次。\\",\\"agentThought\\":{\\"summary\\":\\"天空需要局部压暗，整体颜色需要更冷\\",\\"observations\\":[\\"天空占画面上半部\\",\\"蓝色通道可增强\\"],\\"reasoningVisible\\":\\"先用线性渐变处理天空，再用 HSL 和曲线压住高光。\\",\\"decision\\":\\"apply_local_adjustments\\",\\"nextAction\\":\\"调用 Lightroom 全局和局部工具\\",\\"toolPlan\\":[\\"创建天空线性渐变蒙版\\",\\"调整蓝色色相和曲线高光\\"],\\"userOptions\\":[\\"继续压暗天空\\"]},\\"analysis\\":{\\"intent\\":\\"压暗天空\\",\\"photoType\\":\\"城市夜景\\",\\"recommendedStyle\\":\\"冷调夜景\\"},\\"developSettings\\":{\\"HueAdjustmentBlue\\":-8,\\"SaturationAdjustmentBlue\\":18,\\"LuminanceAdjustmentBlue\\":-12,\\"BluePrimaryHue\\":-6,\\"BluePrimarySaturation\\":12,\\"ParametricHighlights\\":-18,\\"ParametricLights\\":8},\\"localAdjustments\\":[{\\"type\\":\\"linear_gradient\\",\\"target\\":\\"天空\\",\\"coordinateSpace\\":\\"normalized_crop\\",\\"region\\":{\\"x\\":0,\\"y\\":0,\\"w\\":1,\\"h\\":0.45},\\"feather\\":0.65,\\"settings\\":{\\"Exposure2012\\":-0.35,\\"Highlights2012\\":-15,\\"Dehaze\\":20},\\"reason\\":\\"压暗天空并保留城市灯光\\"}]}"
+                        "content": "{\\"assistantMessage\\":\\"我会压暗天空并调整蓝色层次。\\",\\"agentThought\\":{\\"summary\\":\\"天空需要局部压暗，整体颜色需要更冷\\",\\"observations\\":[\\"天空占画面上半部\\",\\"蓝色通道可增强\\"],\\"reasoningVisible\\":\\"先用线性渐变处理天空，再用 HSL 和曲线压住高光。\\",\\"decision\\":\\"apply_local_adjustments\\",\\"nextAction\\":\\"调用 Lightroom 全局和局部工具\\",\\"toolPlan\\":[\\"创建天空线性渐变蒙版\\",\\"调整蓝色色相和曲线高光\\"],\\"userOptions\\":[\\"继续压暗天空\\"]},\\"analysis\\":{\\"intent\\":\\"压暗天空\\",\\"photoType\\":\\"城市夜景\\",\\"recommendedStyle\\":\\"冷调夜景\\"},\\"developSettings\\":{\\"HueAdjustmentBlue\\":-8,\\"SaturationAdjustmentBlue\\":18,\\"LuminanceAdjustmentBlue\\":-12,\\"BluePrimaryHue\\":-6,\\"BluePrimarySaturation\\":12,\\"ParametricHighlights\\":-18,\\"ParametricLights\\":8,\\"ToneCurveName2012\\":\\"Custom\\",\\"ToneCurvePV2012\\":[\\"0, 0\\",\\"32, 24\\",\\"128, 132\\",\\"224, 232\\",\\"255, 255\\"]},\\"localAdjustments\\":[{\\"type\\":\\"linear_gradient\\",\\"target\\":\\"天空\\",\\"coordinateSpace\\":\\"normalized_crop\\",\\"region\\":{\\"x\\":0,\\"y\\":0,\\"w\\":1,\\"h\\":0.45},\\"feather\\":0.65,\\"settings\\":{\\"Exposure2012\\":-0.35,\\"Highlights2012\\":-15,\\"Dehaze\\":20},\\"reason\\":\\"压暗天空并保留城市灯光\\"}]}"
                       }
                     }
                   ]
@@ -219,6 +222,9 @@ class ModelRuntimeAgentTest {
         assertThat(result.developSettings()).containsEntry("LuminanceAdjustmentBlue", -12);
         assertThat(result.developSettings()).containsEntry("BluePrimaryHue", -6);
         assertThat(result.developSettings()).containsEntry("ParametricHighlights", -18);
+        assertThat(result.developSettings()).containsEntry("ToneCurveName2012", "Custom");
+        assertThat((List<String>) result.developSettings().get("ToneCurvePV2012"))
+                .containsExactly("0, 0", "32, 24", "128, 132", "224, 232", "255, 255");
         assertThat(result.localAdjustments()).hasSize(1);
         assertThat(result.localAdjustments().get(0)).containsEntry("type", "linear_gradient");
         assertThat((Map<String, Object>) result.localAdjustments().get(0).get("settings"))

@@ -124,6 +124,8 @@ class AgentConsolePageTest {
         assertThat(html).contains("LuminanceAdjustmentGreen: '绿色明亮度'");
         assertThat(html).contains("ParametricHighlights: '曲线高光'");
         assertThat(html).contains("ParametricLights: '曲线亮调'");
+        assertThat(html).contains("ToneCurvePV2012: '点曲线'");
+        assertThat(html).contains("ToneCurvePV2012Red: '红色点曲线'");
         assertThat(html).contains("BluePrimaryHue: '蓝原色色相'");
         assertThat(html).contains("localizeParamText");
         assertThat(html).contains("paramDisplayName(delta.label || delta.name)");
