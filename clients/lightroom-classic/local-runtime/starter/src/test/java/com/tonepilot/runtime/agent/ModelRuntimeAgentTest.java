@@ -120,6 +120,28 @@ class ModelRuntimeAgentTest {
 
 
     @Test
+    void treatsQwen36PlusAsVisionCapable() {
+        ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
+
+        Boolean qwen36Plus = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "supportsVisionModel",
+                "qwen2",
+                "qwen3.6-plus"
+        );
+        Boolean qwenPlus = ReflectionTestUtils.invokeMethod(
+                modelAgent,
+                "supportsVisionModel",
+                "qwen2",
+                "qwen-plus"
+        );
+
+        assertThat(qwen36Plus).isTrue();
+        assertThat(qwenPlus).isFalse();
+    }
+
+
+    @Test
     void parsesMainAgentThoughtFromModelResult() {
         ModelRuntimeAgent modelAgent = new ModelRuntimeAgent();
         ReflectionTestUtils.setField(modelAgent, "traceLogger", mock(RuntimeTraceLogger.class));

@@ -314,6 +314,9 @@ public class ModelRuntimeAgent {
         if (value.contains("vl") || value.contains("vision") || value.contains("omni")) {
             return true;
         }
+        if ("qwen2".equalsIgnoreCase(provider)) {
+            return value.contains("qwen3.6-plus");
+        }
         if ("openai".equalsIgnoreCase(provider)) {
             return value.contains("gpt-4o") || value.contains("gpt-4.1") || value.contains("gpt-5") || value.contains("o4");
         }
