@@ -341,6 +341,38 @@
             <div class="runtime-stat"><strong>{{ runtimeEventStats.eventCount }}</strong><span>事件</span></div>
           </div>
 
+          <div class="runtime-view-toolbar">
+            <el-radio-group v-model="runtimeEventViewMode" size="small">
+              <el-radio-button label="process">关键链路</el-radio-button>
+              <el-radio-button label="all">全部事件</el-radio-button>
+            </el-radio-group>
+            <span>默认隐藏状态检查、文件读取等轮询噪声。</span>
+          </div>
+
+          <div v-if="runtimeEventViewMode === 'process'" class="runtime-executions">
+            <button
+              v-for="execution in runtimeExecutions"
+              :key="execution.id"
+              type="button"
+              class="runtime-execution"
+              @click="selectRuntimeEvent(execution.event)"
+            >
+              <strong>{{ execution.title }}</strong>
+              <span>{{ execution.summary }}</span>
+              <div class="execution-stages">
+                <el-tag
+                  v-for="stage in execution.stages"
+                  :key="stage.key"
+                  :type="stage.done ? 'success' : 'info'"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ stage.label }}
+                </el-tag>
+              </div>
+            </button>
+          </div>
+
           <el-tree
             class="runtime-tree"
             :data="runtimeTree"
@@ -446,6 +478,7 @@ const runtimeDevices = ref<any[]>([])
 const runtimeEvents = ref<any[]>([])
 const selectedRuntimeEvent = ref<any | undefined>()
 const selectedRuntimePayload = ref('')
+const runtimeEventViewMode = ref<'process' | 'all'>('process')
 const knowledgeStatus = ref('')
 const selectedSourceId = ref<number | undefined>()
 const extractingMaterialId = ref<number | undefined>()
@@ -459,6 +492,12 @@ const runtimeFilters = reactive({
   eventType: '',
   limit: 200
 })
+
+const NOISE_EVENT_TYPES = new Set([
+  'api.status.request',
+  'api.selected_photo.request',
+  'api.file.request'
+])
 
 const runtimeEventLabels: Record<string, string> = {
   'agent.thought': '主 Agent 判断',
@@ -480,18 +519,23 @@ const runtimeEventLabels: Record<string, string> = {
 }
 
 const currentRuntimeDevice = computed(() => runtimeDevices.value.find(device => device.userId === runtimeFilters.userId))
+const visibleRuntimeEvents = computed(() => runtimeEventViewMode.value === 'all'
+  ? runtimeEvents.value
+  : runtimeEvents.value.filter(event => !NOISE_EVENT_TYPES.has(event.eventType))
+)
+const runtimeExecutions = computed(() => buildRuntimeExecutionSummaries(visibleRuntimeEvents.value))
 
 const runtimeEventStats = computed(() => {
   const sessions = new Set<string>()
   const traces = new Set<string>()
-  runtimeEvents.value.forEach((event, eventIndex) => {
+  visibleRuntimeEvents.value.forEach(event => {
     sessions.add(event.sessionId || '无会话')
     traces.add(payloadTraceId(event) || '无 Trace')
   })
   return {
     sessionCount: sessions.size,
     traceCount: traces.size,
-    eventCount: runtimeEvents.value.length
+    eventCount: visibleRuntimeEvents.value.length
   }
 })
 
@@ -817,7 +861,7 @@ function buildRuntimeTree(): RuntimeTreeNode[] {
     summary: device?.lastSeenAt ? `最近在线：${formatTime(device.lastSeenAt)}` : ''
   }
   const sessionMap = new Map<string, RuntimeTreeNode>()
-  runtimeEvents.value.forEach((event, eventIndex) => {
+  visibleRuntimeEvents.value.forEach((event, eventIndex) => {
     const sessionId = event.sessionId || '无会话'
     if (!sessionMap.has(sessionId)) {
       sessionMap.set(sessionId, {
@@ -855,6 +899,57 @@ function buildRuntimeTree(): RuntimeTreeNode[] {
     summary: `${countEventChildren(session)} 个事件`
   }))
   return [root]
+}
+
+function buildRuntimeExecutionSummaries(events: any[]) {
+  const groups = new Map<string, any[]>()
+  events.forEach(event => {
+    const key = `${event.sessionId || '无会话'}:${payloadTraceId(event) || '无 Trace'}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(event)
+  })
+
+  return Array.from(groups.entries()).map(([key, group]) => {
+    const latest = group[0]
+    const first = group[group.length - 1] || latest
+    const payloads = group.map(runtimePayload)
+    const title = runtimeExecutionTitle(group, payloads)
+    const summary = runtimeExecutionSummary(group, payloads)
+    return {
+      id: `execution:${key}`,
+      title,
+      summary,
+      event: latest || first,
+      stages: [
+        { key: 'user', label: '用户输入', done: hasRuntimeStep(group, ['agent.request.received', 'agent.started']) },
+        { key: 'agent', label: 'Agent 判断', done: hasRuntimeStep(group, ['agent.thought', 'agent.intent.analyzed']) },
+        { key: 'model', label: '模型返回', done: hasRuntimeStep(group, ['model.response', 'llm.response']) },
+        { key: 'tool', label: 'Lightroom 工具', done: hasRuntimeStep(group, ['tool.result', 'lightroom.apply.submitted', 'agent.tool.submitted']) },
+        { key: 'final', label: '完成结果', done: hasRuntimeStep(group, ['agent.final', 'lightroom.apply.status.finished']) }
+      ]
+    }
+  }).filter(item => item.title || item.summary)
+}
+
+function hasRuntimeStep(events: any[], steps: string[]) {
+  return events.some(event => steps.includes(event.eventType))
+}
+
+function runtimeExecutionTitle(events: any[], payloads: any[]) {
+  const firstMessage = payloads.map(payload => payload.details?.message || payload.details?.userMessage || payload.message).find(Boolean)
+  const finalPayload = payloads.find(payload => payload.step === 'agent.final' || payload.type === 'agent.final')
+  const finalTitle = finalPayload?.details?.title || finalPayload?.title
+  return String(firstMessage || finalTitle || eventTypeLabel(events[0]?.eventType || '') || '运行时请求').slice(0, 80)
+}
+
+function runtimeExecutionSummary(events: any[], payloads: any[]) {
+  const thought = payloads.find(payload => payload.type === 'agent.thought' || payload.step === 'agent.thought')
+  const content = thought?.content || thought?.details?.content
+  if (content) return String(content).slice(0, 120)
+  const finalPayload = payloads.find(payload => payload.type === 'agent.final' || payload.step === 'agent.final')
+  const finalMessage = finalPayload?.content || finalPayload?.details?.content
+  if (finalMessage) return String(finalMessage).slice(0, 120)
+  return runtimeSummary(events[0] || {})
 }
 
 function countEventChildren(node: RuntimeTreeNode): number {

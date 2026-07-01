@@ -73,7 +73,22 @@ class AgentConsolePageTest {
         }
 
         assertThat(html).contains("result.afterPreviewUrl || result.previewUrl");
-        assertThat(html).contains("setComparison(beforeUrl || lastBeforeUrl, afterUrl");
+        assertThat(html).contains("completeApplyComparison(jobId, afterUrl)");
+    }
+
+    @Test
+    void locksBeforeAndAfterPreviewToCurrentApplyJob() throws Exception {
+        String html;
+        try (var input = getClass().getResourceAsStream("/static/agent-console.html")) {
+            assertThat(input).isNotNull();
+            html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        assertThat(html).contains("activeApplyJob");
+        assertThat(html).contains("lockApplyComparison");
+        assertThat(html).contains("completeApplyComparison");
+        assertThat(html).contains("isComparisonLocked");
+        assertThat(html).contains("fetchFreshSelectedPreviewAfterApply");
     }
 
 

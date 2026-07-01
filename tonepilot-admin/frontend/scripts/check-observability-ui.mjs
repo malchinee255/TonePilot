@@ -12,7 +12,12 @@ const requiredSnippets = [
   '<el-tree',
   '主 Agent 判断',
   '模型返回',
-  'Lightroom 工具'
+  'Lightroom 工具',
+  'runtimeEventViewMode',
+  'NOISE_EVENT_TYPES',
+  'runtimeExecutions',
+  'buildRuntimeExecutionSummaries',
+  'visibleRuntimeEvents'
 ]
 
 const missing = requiredSnippets.filter(snippet => !vue.includes(snippet))

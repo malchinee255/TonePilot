@@ -699,6 +699,7 @@
     let runtimeConfig = null
     let comparisonPhotoKey = ''
     let lastBeforeUrl = ''
+    let activeApplyJob = null
 
     const leftPanelCopy = {
       photo: ['当前照片', '预览、元数据和 Agent 判断'],
@@ -851,6 +852,55 @@
       if (beforeUrl) lastBeforeUrl = beforeUrl
     }
 
+    function imageVersionTime(url) {
+      const match = String(url || '').match(/[?&]t=(\d+)/)
+      return match ? Number(match[1]) * 1000 : 0
+    }
+
+    function isComparisonLocked(photoKey) {
+      return !!activeApplyJob && (!photoKey || !activeApplyJob.photoKey || activeApplyJob.photoKey === photoKey)
+    }
+
+    function lockApplyComparison(jobId, beforeUrl, photoName, photoKey) {
+      activeApplyJob = {
+        jobId,
+        beforeUrl: beforeUrl || lastBeforeUrl,
+        afterUrl: '',
+        photoName: photoName || currentPhoto?.photo?.fileName || '',
+        photoKey: photoKey || comparisonPhotoKey,
+        startedAt: Date.now()
+      }
+      setComparison(activeApplyJob.beforeUrl, '', activeApplyJob.photoName, activeApplyJob.photoKey, jobId)
+    }
+
+    function completeApplyComparison(jobId, afterUrl) {
+      if (!activeApplyJob || activeApplyJob.jobId !== jobId) return
+      activeApplyJob.afterUrl = afterUrl || ''
+      activeApplyJob.completedAt = Date.now()
+      setComparison(
+        activeApplyJob.beforeUrl || lastBeforeUrl,
+        activeApplyJob.afterUrl,
+        activeApplyJob.photoName || currentPhoto?.photo?.fileName || '',
+        activeApplyJob.photoKey || comparisonPhotoKey,
+        jobId
+      )
+    }
+
+    async function fetchFreshSelectedPreviewAfterApply(jobId, startedAt) {
+      const response = await fetch('/api/lightroom/selected-photo')
+      const payload = await response.json()
+      renderSelectedPhoto(payload)
+      const session = payload.session || {}
+      const candidates = [
+        session.currentVersion?.previewUrl || '',
+        payload.previewUrl || ''
+      ].filter(Boolean)
+      return candidates.find(url => {
+        const versionTime = imageVersionTime(url)
+        return !versionTime || versionTime >= startedAt - 2000
+      }) || ''
+    }
+
     function renderPhotoMeta(photo) {
       photoMeta.innerHTML = [
         ['文件', photo.fileName], ['格式', photo.fileFormat], ['相机', photo.camera], ['镜头', photo.lens],
@@ -899,6 +949,16 @@
       const selectedBeforeUrl = session.baselinePreviewUrl || payload.baselinePreviewUrl || payload.previewUrl || ''
       const selectedAfterUrl = session.currentVersion?.previewUrl || ''
       const shouldSwitchPhoto = photoKey && comparisonPhotoKey && photoKey !== comparisonPhotoKey
+      if (shouldSwitchPhoto) {
+        activeApplyJob = null
+      }
+      if (isComparisonLocked(photoKey)) {
+        // 普通选图轮询不覆盖本轮修图前后对比，只补充缺失的修图前图。
+        const lockedBeforeUrl = activeApplyJob.beforeUrl || selectedBeforeUrl || lastBeforeUrl
+        if (!activeApplyJob.beforeUrl && lockedBeforeUrl) activeApplyJob.beforeUrl = lockedBeforeUrl
+        setComparison(lockedBeforeUrl, activeApplyJob.afterUrl || afterImage.getAttribute('src') || '', photoName, photoKey, activeApplyJob.jobId)
+        return
+      }
       if (shouldSwitchPhoto || !comparisonPhotoKey) {
         setComparison(selectedBeforeUrl, selectedAfterUrl, photoName, photoKey, session.currentVersion?.versionId || '')
       } else if (!afterImage.getAttribute('src') && selectedAfterUrl) {
@@ -921,9 +981,12 @@
     async function pollPhoto() {
       try {
         const response = await fetch('/api/lightroom/selected-photo')
-        renderSelectedPhoto(await response.json())
+        const payload = await response.json()
+        renderSelectedPhoto(payload)
+        return payload
       } catch (error) {
         setStatus(photoStatus, '无法读取 Lightroom 状态', 'warn')
+        return null
       }
     }
 
@@ -1044,7 +1107,9 @@
         '<div><strong>照片类型</strong><br />' + escapeHtml(localizeParamText(analysis.photoType || '-')) + '</div>',
         '<div><strong>修图方向</strong><br />' + escapeHtml(localizeParamText(analysis.recommendedStyle || '-')) + '</div>'
       ].join('')
-      if (data.beforePreviewUrl || data.afterPreviewUrl) {
+      if (data.action === 'tool_submitted' && data.apply?.jobId) {
+        lockApplyComparison(data.apply.jobId, data.beforePreviewUrl || lastBeforeUrl, data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || comparisonPhotoKey)
+      } else if (data.beforePreviewUrl || data.afterPreviewUrl) {
         setComparison(data.beforePreviewUrl || lastBeforeUrl, data.afterPreviewUrl || '', data.photo?.fileName || currentPhoto?.photo?.fileName || '', data.session?.photoKey || '', data.version?.versionId || '')
       }
       const suggestedReplies = ((thought.userOptions || data.suggestedReplies || [])).map(reply => '<button type="button" data-reply="' + escapeHtml(reply) + '">' + escapeHtml(reply) + '</button>').join('')
@@ -1135,9 +1200,15 @@
             setStatus(photoStatus, 'Lightroom 工具执行失败', 'warn')
             return
           }
-          const afterUrl = result.afterPreviewUrl || result.previewUrl || ''
-          setComparison(beforeUrl || lastBeforeUrl, afterUrl, currentPhoto?.photo?.fileName || '', '', jobId)
-          addMessage('agent', 'Lightroom 已完成调色。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
+          const startedAt = activeApplyJob?.jobId === jobId ? activeApplyJob.startedAt : Date.now()
+          let afterUrl = result.afterPreviewUrl || result.previewUrl || ''
+          if (!afterUrl) afterUrl = await fetchFreshSelectedPreviewAfterApply(jobId, startedAt)
+          completeApplyComparison(jobId, afterUrl)
+          if (afterUrl) {
+            addMessage('agent', 'Lightroom 已完成调色，左侧已更新本轮修图后预览。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
+          } else {
+            addMessage('agent', 'Lightroom 已完成调色，但插件没有返回本轮修图后预览。请在 Lightroom 中查看效果，或重新载入插件后再试。')
+          }
           setStatus(photoStatus, 'Lightroom 已完成调色', 'ok')
           await pollPhoto()
         } catch (error) {
