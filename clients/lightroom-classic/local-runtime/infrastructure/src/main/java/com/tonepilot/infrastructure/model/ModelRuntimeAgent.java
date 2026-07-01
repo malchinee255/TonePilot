@@ -268,8 +268,10 @@ public class ModelRuntimeAgent {
                 agentThought 是展示给用户看的阶段性判断结果，必须简洁、可解释，不要输出隐藏推理链或冗长思维过程。
                 decision 只能是 respond、ask_user、apply_global_adjustments、apply_local_adjustments、plan_local_adjustments 之一。
                 developSettings 只输出本轮需要真实应用的全局 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
+                全局参数可使用：基础 Exposure2012、Contrast2012、Highlights2012、Shadows2012、Whites2012、Blacks2012、Temperature、Tint、Texture、Clarity2012、Dehaze、Vibrance、Saturation；HSL 使用 HueAdjustmentRed、HueAdjustmentOrange、HueAdjustmentYellow、HueAdjustmentGreen、HueAdjustmentAqua、HueAdjustmentBlue、HueAdjustmentPurple、HueAdjustmentMagenta、SaturationAdjustmentRed、SaturationAdjustmentOrange、SaturationAdjustmentYellow、SaturationAdjustmentGreen、SaturationAdjustmentAqua、SaturationAdjustmentBlue、SaturationAdjustmentPurple、SaturationAdjustmentMagenta、LuminanceAdjustmentRed、LuminanceAdjustmentOrange、LuminanceAdjustmentYellow、LuminanceAdjustmentGreen、LuminanceAdjustmentAqua、LuminanceAdjustmentBlue、LuminanceAdjustmentPurple、LuminanceAdjustmentMagenta；三原色使用 RedPrimaryHue、RedPrimarySaturation、GreenPrimaryHue、GreenPrimarySaturation、BluePrimaryHue、BluePrimarySaturation；Tone Curve 参数曲线使用 ParametricShadows、ParametricDarks、ParametricLights、ParametricHighlights、ParametricShadowSplit、ParametricMidtoneSplit、ParametricHighlightSplit。
+                颜色曲线/参数曲线只在用户明确要求更强反差、压高光、提亮暗部、胶片曲线或你明确判断有必要时输出；不要为了凑参数而改曲线。
                 如果 decision 不是 apply_global_adjustments 且没有全局参数需要和局部工具一起应用，则 developSettings 输出空对象。
-                localAdjustments 用来描述局部蒙版计划；如果用户明确要求应用局部区域调整，decision 使用 apply_local_adjustments，本地插件会打开对应 Lightroom 局部工具并设置局部参数，但现代蒙版区域仍可能需要用户在 Lightroom 中确认或拖拽。
+                localAdjustments 用来描述局部蒙版计划；如果用户明确要求应用局部区域调整，decision 使用 apply_local_adjustments，本地插件会尽量自动创建 Lightroom 局部蒙版并设置局部参数；如果 Lightroom SDK 无法直接创建区域，本地插件会打开对应局部工具并返回需要用户确认的状态。
                 如果只是分析局部修图方案、不应调用 Lightroom 工具，decision 使用 plan_local_adjustments。
                 localAdjustments 的 region 必须使用 normalized_crop 坐标，x/y/w/h/centerX/centerY/radius 都在 0 到 1 之间。
                 JSON 结构：
@@ -285,7 +287,7 @@ public class ModelRuntimeAgent {
                     "userOptions": ["用户可以继续点击或输入的选项"]
                   },
                   "analysis": {"intent":"", "photoType":"", "recommendedStyle":""},
-                  "developSettings": {"Exposure2012": 0.2},
+                  "developSettings": {"Exposure2012": 0.2, "HueAdjustmentBlue": -8, "SaturationAdjustmentBlue": 18, "BluePrimaryHue": -6, "ParametricHighlights": -12},
                   "localAdjustments": [
                     {
                       "type": "linear_gradient|radial_gradient|brush|ai_subject|ai_sky",

@@ -135,6 +135,12 @@ public class FileLightroomToolRepository implements LightroomToolRepository {
             if (result.containsKey("localAdjustmentCount")) {
                 response.put("localAdjustmentCount", result.get("localAdjustmentCount"));
             }
+            if (result.containsKey("localMaskCreatedCount")) {
+                response.put("localMaskCreatedCount", result.get("localMaskCreatedCount"));
+            }
+            if (result.containsKey("localMaskNeedsUserPlacement")) {
+                response.put("localMaskNeedsUserPlacement", result.get("localMaskNeedsUserPlacement"));
+            }
             return response;
         } catch (Exception exception) {
             traceLogger.error("lightroom.apply.result.read_failed", jobId, Map.of(

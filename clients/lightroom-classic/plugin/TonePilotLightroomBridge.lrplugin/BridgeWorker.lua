@@ -13,7 +13,7 @@ local BridgeWorker = {
     running = false
 }
 
-local WORKER_BUILD = 21
+local WORKER_BUILD = 22
 local lastPreviewKey = ""
 local lastPreviewAt = 0
 local lastMetadataDebugKey = ""
@@ -119,13 +119,21 @@ end
 function applyLocalAdjustmentGuides(localAdjustments)
     switchToDevelopModule()
     local messages = {}
+    local createdCount = 0
+    local needsUserPlacement = false
     for _, plan in ipairs(localAdjustments) do
         local maskType = tostring(plan.type or "")
-        selectLocalAdjustmentTool(maskType)
+        local toolSelected = selectLocalAdjustmentTool(maskType)
+        local creation = tryCreateLocalAdjustmentRegion(plan)
         local appliedCount = applyLocalAdjustmentSettings(plan.settings or {})
-        table.insert(messages, localAdjustmentGuideMessage(plan, appliedCount))
+        if creation.created then
+            createdCount = createdCount + 1
+        else
+            needsUserPlacement = true
+        end
+        table.insert(messages, localAdjustmentGuideMessage(plan, appliedCount, toolSelected, creation))
     end
-    return table.concat(messages, "；")
+    return table.concat(messages, "；"), createdCount, needsUserPlacement
 end
 
 function switchToDevelopModule()
@@ -139,15 +147,62 @@ function switchToDevelopModule()
 end
 
 function selectLocalAdjustmentTool(maskType)
+    local ok, message = LrTasks.pcall(function()
+        if maskType == "linear_gradient" then
+            LrDevelopController.goToDevelopGraduatedFilter()
+            return
+        end
+        if maskType == "radial_gradient" then
+            LrDevelopController.goToDevelopRadialFilter()
+            return
+        end
+        LrDevelopController.selectTool("localized")
+    end)
+    if not ok then
+        writeDiagnostic("local-adjustment-tool-error.txt", tostring(maskType) .. "=" .. tostring(message))
+    end
+    LrTasks.sleep(0.15)
+    return ok
+end
+
+function tryCreateLocalAdjustmentRegion(plan)
+    local maskType = tostring(plan.type or "")
+    local region = plan.region or {}
+    local feather = numberOrZero(plan.feather)
+    local attempts = {}
+
     if maskType == "linear_gradient" then
-        LrDevelopController.goToDevelopGraduatedFilter()
-        return
+        table.insert(attempts, { name = "createLinearGradient", args = { region.x or 0, region.y or 0, region.w or 1, region.h or 0.45, feather } })
+        table.insert(attempts, { name = "addLinearGradient", args = { region.x or 0, region.y or 0, region.w or 1, region.h or 0.45, feather } })
+        table.insert(attempts, { name = "newGraduatedFilter", args = { region.x or 0, region.y or 0, region.w or 1, region.h or 0.45, feather } })
+    elseif maskType == "radial_gradient" then
+        table.insert(attempts, { name = "createRadialGradient", args = { region.centerX or 0.5, region.centerY or 0.5, region.radius or 0.3, feather } })
+        table.insert(attempts, { name = "addRadialGradient", args = { region.centerX or 0.5, region.centerY or 0.5, region.radius or 0.3, feather } })
+        table.insert(attempts, { name = "newRadialFilter", args = { region.centerX or 0.5, region.centerY or 0.5, region.radius or 0.3, feather } })
+    else
+        return { created = false, method = "manual", message = "当前类型需要在 Lightroom 中手动确认蒙版区域" }
     end
-    if maskType == "radial_gradient" then
-        LrDevelopController.goToDevelopRadialFilter()
-        return
+
+    local errors = {}
+    for _, attempt in ipairs(attempts) do
+        local fn = LrDevelopController[attempt.name]
+        if type(fn) == "function" then
+            local ok, result = LrTasks.pcall(function()
+                local unpackFn = table.unpack or unpack
+                return fn(unpackFn(attempt.args))
+            end)
+            if ok then
+                writeDiagnostic("local-adjustment-create-success.txt", tostring(maskType) .. "=" .. attempt.name)
+                return { created = true, method = attempt.name, message = "已尝试自动创建蒙版区域" }
+            end
+            table.insert(errors, attempt.name .. ":" .. tostring(result))
+        else
+            table.insert(errors, attempt.name .. ":不可用")
+        end
     end
-    LrDevelopController.selectTool("localized")
+
+    writeDiagnostic("local-adjustment-create-unavailable.txt", tostring(maskType) .. " " .. table.concat(errors, " | "))
+    return { created = false, method = "tool_only", message = "Lightroom SDK 当前未暴露可调用的区域创建函数，已切换工具并写入局部参数，需要在画面中拖拽/确认蒙版范围" }
 end
 
 function applyLocalAdjustmentSettings(settings)
@@ -184,6 +239,9 @@ function localAdjustmentParamName(key)
         Blacks = "local_Blacks",
         Clarity2012 = "local_Clarity",
         Clarity = "local_Clarity",
+        Texture = "local_Texture",
+        Dehaze = "local_Dehaze",
+        Vibrance = "local_Vibrance",
         Saturation = "local_Saturation",
         Sharpness = "local_Sharpness",
         Temperature = "local_Temperature",
@@ -195,13 +253,40 @@ function localAdjustmentParamName(key)
     return mapping[tostring(key)]
 end
 
-function localAdjustmentGuideMessage(plan, appliedCount)
+function localAdjustmentGuideMessage(plan, appliedCount, toolSelected, creation)
     local target = tostring(plan.target or plan.type or "局部区域")
     local maskType = tostring(plan.type or "局部工具")
-    if maskType == "ai_sky" or maskType == "ai_subject" then
-        return "已打开局部调整工具，并为“" .. target .. "”设置 " .. tostring(appliedCount) .. " 个参数；AI 蒙版区域需要在 Lightroom 中手动选择确认"
+    local regionText = encodeJson(plan.region or {})
+    local base = "“" .. target .. "”" .. localMaskTypeName(maskType) .. "：已设置 " .. tostring(appliedCount) .. " 个局部参数，区域=" .. regionText
+    if creation ~= nil and creation.created then
+        return base .. "，已通过 " .. tostring(creation.method or "SDK") .. " 尝试自动创建蒙版"
     end
-    return "已打开“" .. target .. "”的局部工具引导，并设置 " .. tostring(appliedCount) .. " 个局部参数"
+    if maskType == "ai_sky" or maskType == "ai_subject" then
+        return base .. "；AI 蒙版需要在 Lightroom 蒙版面板中选择确认"
+    end
+    if toolSelected then
+        return base .. "；已打开对应局部工具，但 Lightroom Classic SDK 未确认支持按坐标自动落点，请在画面中确认蒙版位置"
+    end
+    return base .. "；局部工具打开失败，请在 Lightroom 中手动创建蒙版"
+end
+
+function localMaskTypeName(maskType)
+    if maskType == "linear_gradient" then
+        return "线性渐变蒙版"
+    end
+    if maskType == "radial_gradient" then
+        return "径向渐变蒙版"
+    end
+    if maskType == "brush" then
+        return "画笔蒙版"
+    end
+    if maskType == "ai_sky" then
+        return "天空 AI 蒙版"
+    end
+    if maskType == "ai_subject" then
+        return "主体 AI 蒙版"
+    end
+    return "局部蒙版"
 end
 
 function tableHasEntries(value)
@@ -241,8 +326,11 @@ function applyDevelopSettingsJob(job)
 
     local localAdjustments = job.localAdjustments or {}
     if tableHasEntries(localAdjustments) then
-        job.localGuideMessage = applyLocalAdjustmentGuides(localAdjustments)
+        local guideMessage, createdCount, needsUserPlacement = applyLocalAdjustmentGuides(localAdjustments)
+        job.localGuideMessage = guideMessage
         job.localAdjustmentCount = tableSize(localAdjustments)
+        job.localMaskCreatedCount = createdCount
+        job.localMaskNeedsUserPlacement = needsUserPlacement
     end
 
     local previewOk, previewUrlOrError = LrTasks.pcall(function()
@@ -392,6 +480,18 @@ function developPreviewSignature(photo)
         "HueAdjustmentBlue",
         "SaturationAdjustmentBlue",
         "LuminanceAdjustmentBlue",
+        "HueAdjustmentPurple",
+        "SaturationAdjustmentPurple",
+        "LuminanceAdjustmentPurple",
+        "HueAdjustmentMagenta",
+        "SaturationAdjustmentMagenta",
+        "LuminanceAdjustmentMagenta",
+        "RedPrimaryHue",
+        "RedPrimarySaturation",
+        "GreenPrimaryHue",
+        "GreenPrimarySaturation",
+        "BluePrimaryHue",
+        "BluePrimarySaturation",
         "GrainAmount",
         "GrainSize",
         "GrainFrequency",
@@ -417,6 +517,8 @@ function developPreviewSignature(photo)
         "ColorGradeHighlightHue",
         "ColorGradeHighlightSat",
         "ColorGradeBlending",
+        "ColorGradeGlobalHue",
+        "ColorGradeGlobalSat",
         "LensProfileEnable",
         "AutoLateralCA",
         "UprightTransformMode",

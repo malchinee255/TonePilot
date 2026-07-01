@@ -119,6 +119,12 @@ class AgentConsolePageTest {
         assertThat(html).contains("const PARAM_LABELS");
         assertThat(html).contains("Exposure2012: '曝光'");
         assertThat(html).contains("BlueSaturation: '蓝色饱和度'");
+        assertThat(html).contains("HueAdjustmentBlue: '蓝色色相'");
+        assertThat(html).contains("SaturationAdjustmentRed: '红色饱和度'");
+        assertThat(html).contains("LuminanceAdjustmentGreen: '绿色明亮度'");
+        assertThat(html).contains("ParametricHighlights: '曲线高光'");
+        assertThat(html).contains("ParametricLights: '曲线亮调'");
+        assertThat(html).contains("BluePrimaryHue: '蓝原色色相'");
         assertThat(html).contains("localizeParamText");
         assertThat(html).contains("paramDisplayName(delta.label || delta.name)");
         assertThat(html).contains("formatDeltaValue(delta)");
