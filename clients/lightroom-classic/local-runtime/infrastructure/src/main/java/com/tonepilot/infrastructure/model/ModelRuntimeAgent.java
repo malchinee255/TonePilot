@@ -266,10 +266,11 @@ public class ModelRuntimeAgent {
                 只允许输出严格 JSON，不要输出 Markdown。
                 你需要像主 Agent 一样先观察用户意图、当前照片调色状态和可用工具，再决定下一步动作。
                 agentThought 是展示给用户看的阶段性判断结果，必须简洁、可解释，不要输出隐藏推理链或冗长思维过程。
-                decision 只能是 respond、ask_user、apply_global_adjustments、plan_local_adjustments 之一。
+                decision 只能是 respond、ask_user、apply_global_adjustments、apply_local_adjustments、plan_local_adjustments 之一。
                 developSettings 只输出本轮需要真实应用的全局 Lightroom Develop Settings，未被用户明确要求或你明确规划的参数不要出现。
-                如果 decision 不是 apply_global_adjustments，则 developSettings 输出空对象。
-                localAdjustments 用来描述局部蒙版计划，当前只作为计划展示，不会直接写入 Lightroom 蒙版。
+                如果 decision 不是 apply_global_adjustments 且没有全局参数需要和局部工具一起应用，则 developSettings 输出空对象。
+                localAdjustments 用来描述局部蒙版计划；如果用户明确要求应用局部区域调整，decision 使用 apply_local_adjustments，本地插件会打开对应 Lightroom 局部工具并设置局部参数，但现代蒙版区域仍可能需要用户在 Lightroom 中确认或拖拽。
+                如果只是分析局部修图方案、不应调用 Lightroom 工具，decision 使用 plan_local_adjustments。
                 localAdjustments 的 region 必须使用 normalized_crop 坐标，x/y/w/h/centerX/centerY/radius 都在 0 到 1 之间。
                 JSON 结构：
                 {
@@ -278,7 +279,7 @@ public class ModelRuntimeAgent {
                     "summary": "主 Agent 对本轮请求的简短判断",
                     "observations": ["看到的关键画面/参数/意图线索"],
                     "reasoningVisible": "面向用户可展示的判断依据，不要写隐藏推理链",
-                    "decision": "respond|ask_user|apply_global_adjustments|plan_local_adjustments",
+                    "decision": "respond|ask_user|apply_global_adjustments|apply_local_adjustments|plan_local_adjustments",
                     "nextAction": "下一步准备做什么",
                     "toolPlan": ["如果要调用工具，列出准备做的动作"],
                     "userOptions": ["用户可以继续点击或输入的选项"]

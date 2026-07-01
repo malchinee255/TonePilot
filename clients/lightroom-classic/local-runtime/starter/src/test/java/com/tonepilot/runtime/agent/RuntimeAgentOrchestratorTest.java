@@ -58,7 +58,7 @@ class RuntimeAgentOrchestratorTest {
 
         assertThat(result).containsEntry("success", false);
         assertThat(String.valueOf(result.get("message"))).contains("Lightroom");
-        verify(context.toolService, never()).applyDevelopSettings(anyMap());
+        verify(context.toolService, never()).applyAdjustments(anyMap(), any());
         verify(context.traceLogger).warn(eq("agent.lightroom.unavailable"), eq("session-1"), anyMap());
     }
 
@@ -85,7 +85,7 @@ class RuntimeAgentOrchestratorTest {
         Map<String, Object> data = (Map<String, Object>) result.get("data");
         assertThat(data).containsEntry("action", "respond");
         assertThat(data).containsKey("modelRawContent");
-        verify(context.toolService, never()).applyDevelopSettings(anyMap());
+        verify(context.toolService, never()).applyAdjustments(anyMap(), any());
     }
 
     @Test
@@ -100,7 +100,7 @@ class RuntimeAgentOrchestratorTest {
                 Map.of("intent", "修成夜景电影感", "photoType", "夜景", "recommendedStyle", "夜景电影感"),
                 "{\"assistantMessage\":\"我会压一点高光\"}"
         ));
-        when(context.toolService.applyDevelopSettings(anyMap())).thenReturn(Map.of(
+        when(context.toolService.applyAdjustments(anyMap(), any())).thenReturn(Map.of(
                 "success", true,
                 "pending", true,
                 "jobId", "agent-apply-1",
@@ -117,11 +117,11 @@ class RuntimeAgentOrchestratorTest {
         Map<String, Object> data = (Map<String, Object>) result.get("data");
         assertThat(data).containsEntry("action", "tool_submitted");
         assertThat((Map<String, Object>) data.get("apply")).containsEntry("jobId", "agent-apply-1");
-        verify(context.toolService).applyDevelopSettings(Map.of("Exposure2012", 0.2));
+        verify(context.toolService).applyAdjustments(Map.of("Exposure2012", 0.2), List.of());
     }
 
     @Test
-    void localAdjustmentPlansAreReturnedButNotSubmittedAsGlobalDevelopSettings() {
+    void localAdjustmentPlansAreSubmittedToLightroomAsGuidedMaskTasks() {
         TestContext context = new TestContext();
         context.lightroomAvailable();
         context.qwenSelected();
@@ -133,29 +133,39 @@ class RuntimeAgentOrchestratorTest {
                 "settings", Map.of("Exposure2012", -0.25, "Highlights2012", -18)
         );
         when(context.modelAgent.plan(any(), eq("qwen2"), anyMap(), anyString())).thenReturn(new AgentTuneResult(
-                "我会先整体提亮，再计划用线性渐变压暗天空；当前插件只会先执行全局参数。",
-                Map.of("Exposure2012", 0.12),
-                List.of(new AgentDelta("basic", "Exposure2012", "曝光", 0, 0.12, 0.12, "整体提亮")),
-                Map.of("intent", "夜景电影感", "photoType", "夜景城市照片", "recommendedStyle", "全局提亮，天空局部压暗"),
+                "我会用线性渐变压暗天空，并把这一步下发给 Lightroom 局部工具。",
+                new AgentThought(
+                        "天空需要单独压暗",
+                        List.of("天空占画面上半部分", "用户明确要求天空压暗"),
+                        "局部调整比全局压暗更适合保留城市灯光。",
+                        "apply_local_adjustments",
+                        "调用 Lightroom 局部蒙版引导工具",
+                        List.of("打开线性渐变工具", "设置局部曝光和高光参数"),
+                        List.of("继续微调天空")
+                ),
+                Map.of(),
+                List.of(),
+                Map.of("intent", "天空压暗", "photoType", "夜景城市照片", "recommendedStyle", "局部压暗天空"),
                 List.of(skyPlan),
                 "{\"localAdjustments\":[{\"target\":\"天空\"}]}"
         ));
-        when(context.toolService.applyDevelopSettings(anyMap())).thenReturn(Map.of(
+        when(context.toolService.applyAdjustments(anyMap(), any())).thenReturn(Map.of(
                 "success", true,
                 "pending", true,
                 "jobId", "agent-apply-local-1"
         ));
 
         Map<String, Object> result = context.orchestrator.chat(Map.of(
-                "message", "修成夜景电影感，天空压暗一点",
+                "message", "天空单独压暗一点",
                 "provider", "qwen2",
                 "sessionId", "session-local"
         ));
 
         Map<String, Object> data = (Map<String, Object>) result.get("data");
+        assertThat(data).containsEntry("action", "tool_submitted");
         assertThat((List<Map<String, Object>>) data.get("localAdjustments")).containsExactly(skyPlan);
-        assertThat((Map<String, Object>) data.get("capabilities")).containsEntry("supportsLocalMasks", false);
-        verify(context.toolService).applyDevelopSettings(Map.of("Exposure2012", 0.12));
+        assertThat((Map<String, Object>) data.get("capabilities")).containsEntry("supportsLocalMaskGuides", true);
+        verify(context.toolService).applyAdjustments(Map.of(), List.of(skyPlan));
     }
 
     @Test
@@ -174,7 +184,7 @@ class RuntimeAgentOrchestratorTest {
 
         assertThat(result).containsEntry("success", false);
         assertThat(result.get("message")).isEqualTo("模型配置不完整，请先填写 API Key。");
-        verify(context.toolService, never()).applyDevelopSettings(anyMap());
+        verify(context.toolService, never()).applyAdjustments(anyMap(), any());
     }
 
     @Test

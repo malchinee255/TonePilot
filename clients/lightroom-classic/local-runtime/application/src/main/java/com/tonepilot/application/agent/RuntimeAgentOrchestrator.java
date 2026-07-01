@@ -153,8 +153,14 @@ public class RuntimeAgentOrchestrator {
         data.put("knowledgeMatches", knowledgeMatches);
 
         if (shouldApply(message, tuneResult)) {
-            emit(reactEvents, eventSink, sessionId, "tool.call", "调用 Lightroom 工具", "主 Agent 决定执行全局 Develop Settings 调色。", Map.of("developSettings", tuneResult.developSettings()));
-            Map<String, Object> applyResult = toolService.applyDevelopSettings(tuneResult.developSettings());
+            boolean hasLocalAdjustments = tuneResult.localAdjustments() != null && !tuneResult.localAdjustments().isEmpty();
+            emit(reactEvents, eventSink, sessionId, "tool.call", "调用 Lightroom 工具", hasLocalAdjustments
+                    ? "主 Agent 决定把局部蒙版计划下发给 Lightroom 插件，插件会打开相应局部工具并设置参数。"
+                    : "主 Agent 决定执行全局 Develop Settings 调色。", Map.of(
+                    "developSettings", tuneResult.developSettings(),
+                    "localAdjustments", tuneResult.localAdjustments()
+            ));
+            Map<String, Object> applyResult = toolService.applyAdjustments(tuneResult.developSettings(), tuneResult.localAdjustments());
             emit(reactEvents, eventSink, sessionId, "tool.result", "Lightroom 任务已提交", String.valueOf(applyResult.getOrDefault("message", "已提交 Lightroom 调色任务。")), Map.of("apply", applyResult));
             data.put("action", "tool_submitted");
             data.put("apply", applyResult);
@@ -230,20 +236,28 @@ public class RuntimeAgentOrchestrator {
     }
 
     private boolean shouldApply(String message, AgentTuneResult tuneResult) {
-        if (tuneResult.developSettings() == null || tuneResult.developSettings().isEmpty()) {
+        boolean hasDevelopSettings = tuneResult.developSettings() != null && !tuneResult.developSettings().isEmpty();
+        boolean hasLocalAdjustments = tuneResult.localAdjustments() != null && !tuneResult.localAdjustments().isEmpty();
+        if (!hasDevelopSettings && !hasLocalAdjustments) {
             return false;
         }
         String decision = tuneResult.agentThought() == null ? "" : String.valueOf(tuneResult.agentThought().decision()).trim();
-        if (!decision.isBlank()) {
-            return "apply_global_adjustments".equals(decision);
+        if ("apply_global_adjustments".equals(decision) || "apply_local_adjustments".equals(decision)) {
+            return true;
         }
         String value = message == null ? "" : message.trim().toLowerCase();
+        if ("plan_local_adjustments".equals(decision)) {
+            return containsAny(value, "修", "调", "改", "应用", "执行", "按这个", "压暗", "提亮", "单独");
+        }
+        if (!decision.isBlank()) {
+            return false;
+        }
         if (containsAny(value, "不要修", "先别修", "只分析", "分析一下", "看看", "建议", "方案")) {
             return containsAny(value, "修成", "调成", "改成", "执行", "应用", "按这个修");
         }
         return containsAny(value,
                 "修", "调", "改", "应用", "执行", "亮", "暗", "冷", "暖", "电影", "胶片",
-                "通透", "干净", "鲜艳", "饱和", "对比", "肤色", "绿色", "蓝色", "apply", "edit");
+                "通透", "干净", "鲜艳", "饱和", "对比", "肤色", "绿色", "蓝色", "局部", "蒙版", "天空", "主体", "apply", "edit");
     }
 
     private boolean containsAny(String value, String... tokens) {
@@ -269,8 +283,9 @@ public class RuntimeAgentOrchestrator {
         data.put("capabilities", Map.of(
                 "supportsGlobalDevelopSettings", true,
                 "supportsLocalMasks", false,
-                "localMaskMode", "plan_only",
-                "message", "当前 Lightroom 插件只会真实执行全局 Develop Settings；局部蒙版先作为 Agent 计划展示。"
+                "supportsLocalMaskGuides", true,
+                "localMaskMode", "guided_tool",
+                "message", "当前 Lightroom 插件可打开对应局部工具并设置参数；现代蒙版区域仍需要在 Lightroom 中确认或拖拽。"
         ));
         data.put("modelRawContent", tuneResult.rawModelContent());
         return data;

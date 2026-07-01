@@ -1127,7 +1127,7 @@
     }
 
     function labelDecision(decision) {
-      const labels = { respond: '先回复分析，不直接修图', ask_user: '需要用户补充选择', apply_global_adjustments: '调用 Lightroom 全局调色', plan_local_adjustments: '给出局部蒙版计划' }
+      const labels = { respond: '先回复分析，不直接修图', ask_user: '需要用户补充选择', apply_global_adjustments: '调用 Lightroom 全局调色', apply_local_adjustments: '调用 Lightroom 局部工具引导', plan_local_adjustments: '给出局部蒙版计划' }
       return labels[decision] || decision
     }
 
@@ -1320,10 +1320,11 @@
           let afterUrl = result.afterPreviewUrl || result.previewUrl || ''
           if (!afterUrl) afterUrl = await fetchFreshSelectedPreviewAfterApply(jobId, startedAt)
           completeApplyComparison(jobId, afterUrl)
+          const localGuideMessage = result.localGuideMessage ? '<br />局部工具：' + escapeHtml(localizeParamText(result.localGuideMessage)) : ''
           if (afterUrl) {
-            addMessage('agent', 'Lightroom 已完成调色，左侧已更新本轮修图后预览。你可以继续说“再亮一点”“绿色别那么脏”来微调。')
+            addMessage('agent', 'Lightroom 已完成调色，左侧已更新本轮修图后预览。你可以继续说“再亮一点”“绿色别那么脏”来微调。' + localGuideMessage)
           } else {
-            addMessage('agent', 'Lightroom 已完成调色，但插件没有返回本轮修图后预览。请在 Lightroom 中查看效果，或重新载入插件后再试。')
+            addMessage('agent', 'Lightroom 已完成调色，但插件没有返回本轮修图后预览。请在 Lightroom 中查看效果，或重新载入插件后再试。' + localGuideMessage)
           }
           setStatus(photoStatus, 'Lightroom 已完成调色', 'ok')
           await pollPhoto()

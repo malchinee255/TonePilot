@@ -1,4 +1,6 @@
 local LrApplication = import "LrApplication"
+local LrApplicationView = import "LrApplicationView"
+local LrDevelopController = import "LrDevelopController"
 local LrFileUtils = import "LrFileUtils"
 local LrFunctionContext = import "LrFunctionContext"
 local LrExportSession = import "LrExportSession"
@@ -11,7 +13,7 @@ local BridgeWorker = {
     running = false
 }
 
-local WORKER_BUILD = 20
+local WORKER_BUILD = 21
 local lastPreviewKey = ""
 local lastPreviewAt = 0
 local lastMetadataDebugKey = ""
@@ -84,7 +86,7 @@ function processApplyJob(jobPath)
     end)
 
     if success then
-        writeApplyResult(job, true, "已应用到 Lightroom 当前照片。")
+        writeApplyResult(job, true, applySuccessMessage(job))
     else
         writeApplyResult(job, false, "Lightroom 应用参数失败：" .. tostring(message))
     end
@@ -100,6 +102,129 @@ function moveToProcessing(jobPath)
     return processingPath
 end
 
+function applySuccessMessage(job)
+    local parts = {}
+    if tableHasEntries(job.developSettings or {}) then
+        table.insert(parts, "已应用全局调色参数")
+    end
+    if tableHasEntries(job.localAdjustments or {}) then
+        table.insert(parts, job.localGuideMessage or "已打开 Lightroom 局部工具引导")
+    end
+    if #parts == 0 then
+        return "没有需要应用的 Lightroom 参数。"
+    end
+    return table.concat(parts, "；") .. "。"
+end
+
+function applyLocalAdjustmentGuides(localAdjustments)
+    switchToDevelopModule()
+    local messages = {}
+    for _, plan in ipairs(localAdjustments) do
+        local maskType = tostring(plan.type or "")
+        selectLocalAdjustmentTool(maskType)
+        local appliedCount = applyLocalAdjustmentSettings(plan.settings or {})
+        table.insert(messages, localAdjustmentGuideMessage(plan, appliedCount))
+    end
+    return table.concat(messages, "；")
+end
+
+function switchToDevelopModule()
+    local ok, message = LrTasks.pcall(function()
+        LrApplicationView.switchToModule("develop")
+    end)
+    if not ok then
+        error("无法切换到 Lightroom 修改照片模块：" .. tostring(message))
+    end
+    LrTasks.sleep(0.2)
+end
+
+function selectLocalAdjustmentTool(maskType)
+    if maskType == "linear_gradient" then
+        LrDevelopController.goToDevelopGraduatedFilter()
+        return
+    end
+    if maskType == "radial_gradient" then
+        LrDevelopController.goToDevelopRadialFilter()
+        return
+    end
+    LrDevelopController.selectTool("localized")
+end
+
+function applyLocalAdjustmentSettings(settings)
+    local appliedCount = 0
+    for key, value in pairs(settings) do
+        local localKey = localAdjustmentParamName(key)
+        if localKey ~= nil then
+            local ok, errorMessage = LrTasks.pcall(function()
+                LrDevelopController.setValue(localKey, value)
+            end)
+            if ok then
+                appliedCount = appliedCount + 1
+            else
+                writeDiagnostic("local-adjustment-param-error.txt", tostring(localKey) .. "=" .. tostring(errorMessage))
+            end
+        end
+    end
+    return appliedCount
+end
+
+function localAdjustmentParamName(key)
+    local mapping = {
+        Exposure2012 = "local_Exposure",
+        Exposure = "local_Exposure",
+        Contrast2012 = "local_Contrast",
+        Contrast = "local_Contrast",
+        Highlights2012 = "local_Highlights",
+        Highlights = "local_Highlights",
+        Shadows2012 = "local_Shadows",
+        Shadows = "local_Shadows",
+        Whites2012 = "local_Whites",
+        Whites = "local_Whites",
+        Blacks2012 = "local_Blacks",
+        Blacks = "local_Blacks",
+        Clarity2012 = "local_Clarity",
+        Clarity = "local_Clarity",
+        Saturation = "local_Saturation",
+        Sharpness = "local_Sharpness",
+        Temperature = "local_Temperature",
+        Tint = "local_Tint",
+        LuminanceSmoothing = "local_LuminanceNoise",
+        Moire = "local_Moire",
+        Defringe = "local_Defringe"
+    }
+    return mapping[tostring(key)]
+end
+
+function localAdjustmentGuideMessage(plan, appliedCount)
+    local target = tostring(plan.target or plan.type or "局部区域")
+    local maskType = tostring(plan.type or "局部工具")
+    if maskType == "ai_sky" or maskType == "ai_subject" then
+        return "已打开局部调整工具，并为“" .. target .. "”设置 " .. tostring(appliedCount) .. " 个参数；AI 蒙版区域需要在 Lightroom 中手动选择确认"
+    end
+    return "已打开“" .. target .. "”的局部工具引导，并设置 " .. tostring(appliedCount) .. " 个局部参数"
+end
+
+function tableHasEntries(value)
+    if type(value) ~= "table" then
+        return false
+    end
+    for _, _ in pairs(value) do
+        return true
+    end
+    return false
+end
+
+function tableSize(value)
+    if type(value) ~= "table" then
+        return 0
+    end
+    local count = 0
+    for _, _ in pairs(value) do
+        count = count + 1
+    end
+    return count
+end
+
 function applyDevelopSettingsJob(job)
     local catalog = LrApplication.activeCatalog()
     local selected = currentTargetPhoto(catalog)
@@ -107,9 +232,18 @@ function applyDevelopSettingsJob(job)
         error("请先在 Lightroom Classic 中选中要修图的照片")
     end
 
-    catalog:withWriteAccessDo("TonePilot Agent 应用调色参数", function()
-        selected:applyDevelopSettings(job.developSettings or {})
-    end, { timeout = Config.writeAccessTimeoutSeconds or 30 })
+    local developSettings = job.developSettings or {}
+    if tableHasEntries(developSettings) then
+        catalog:withWriteAccessDo("TonePilot Agent 应用调色参数", function()
+            selected:applyDevelopSettings(developSettings)
+        end, { timeout = Config.writeAccessTimeoutSeconds or 30 })
+    end
+
+    local localAdjustments = job.localAdjustments or {}
+    if tableHasEntries(localAdjustments) then
+        job.localGuideMessage = applyLocalAdjustmentGuides(localAdjustments)
+        job.localAdjustmentCount = tableSize(localAdjustments)
+    end
 
     local previewOk, previewUrlOrError = LrTasks.pcall(function()
         local previewFileName = job.previewFileName or (tostring(job.id or "agent-apply") .. ".jpg")

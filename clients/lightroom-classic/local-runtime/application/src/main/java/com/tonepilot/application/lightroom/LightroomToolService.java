@@ -20,6 +20,7 @@ import com.tonepilot.repository.lightroom.LightroomToolRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -28,8 +29,15 @@ public class LightroomToolService {
     @Autowired
     private LightroomToolRepository repository;
 
+    public Map<String, Object> applyAdjustments(
+            Map<String, Object> developSettings,
+            List<Map<String, Object>> localAdjustments
+    ) {
+        return repository.applyAdjustments(developSettings, localAdjustments);
+    }
+
     public Map<String, Object> applyDevelopSettings(Map<String, Object> developSettings) {
-        return repository.applyDevelopSettings(developSettings);
+        return applyAdjustments(developSettings, List.of());
     }
 
     public Map<String, Object> applyStatus(String jobId) {
