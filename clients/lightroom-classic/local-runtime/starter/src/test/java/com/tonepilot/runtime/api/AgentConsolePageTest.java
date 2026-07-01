@@ -62,6 +62,7 @@ class AgentConsolePageTest {
         assertThat(html).contains("agent.final");
         assertThat(html).doesNotContain("Agent 执行过程");
         assertThat(html).doesNotContain("读取 Lightroom 当前照片和调色上下文");
+        assertThat(html).doesNotContain("主 Agent 正在综合照片、上下文、知识库和 Lightroom 工具结果。");
     }
 
     @Test

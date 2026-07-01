@@ -1183,9 +1183,7 @@
     function appendReactEvent(container, event) {
       if (!container || !event) return
       const type = event.type || ''
-      const statusLine = container.querySelector('.thinking-card > div:nth-child(2)')
       if (!isVisibleReactEvent(event)) {
-        if (statusLine && type !== 'agent.final') statusLine.textContent = '主 Agent 正在综合照片、上下文、知识库和 Lightroom 工具结果。'
         return
       }
       const content = event.content || ''
